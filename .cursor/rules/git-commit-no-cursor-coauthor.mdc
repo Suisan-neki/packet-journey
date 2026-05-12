@@ -1,0 +1,8 @@
+---
+description: コミットに Cursor を Co-authored-by で載せない
+alwaysApply: true
+---
+
+# Git コミット
+
+エージェントが `git commit` 用のメッセージを用意するとき、`Co-authored-by:` で Cursor・Cursor Bot・類似のエージェントを共同作者として追加しない。作者はリポジトリ利用者の `user.name` / `user.email` のみとする。
