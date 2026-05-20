@@ -18,6 +18,8 @@ const IPV4_SRC_ADDR_OFFSET: usize = ETH_HDR_LEN + 12;
 const IPV4_DST_ADDR_OFFSET: usize = ETH_HDR_LEN + 16;
 const IPV4_MIN_HDR_LEN: usize = 20;
 const TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS: usize = ETH_HDR_LEN + IPV4_MIN_HDR_LEN;
+const TCP_DATA_OFFSET_OFFSET: usize = TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 12;
+const TCP_MIN_HDR_LEN: usize = 20;
 
 #[xdp]
 pub fn xdp_hello(ctx: XdpContext) -> u32 {
@@ -74,6 +76,7 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
             let ports = ptr_at::<[u8; 4]>(&ctx, transport_offset)? as *const u8;
             let src_port = read_be_u16_at(ports);
             let dst_port = read_be_u16_at(unsafe { ports.add(2) });
+            let tcp_data_offset = read_u8(&ctx, TCP_DATA_OFFSET_OFFSET)? >> 4;
             info!(
                 &ctx,
                 "received IPv4 TCP packet: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
@@ -87,6 +90,14 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
                 dst_addr[2],
                 dst_addr[3],
                 dst_port
+            );
+            log_http_method(
+                &ctx,
+                src_addr,
+                dst_addr,
+                src_port,
+                dst_port,
+                tcp_data_offset,
             );
         }
         IPPROTO_UDP => {
@@ -158,6 +169,72 @@ fn read_be_u16_at(ptr: *const u8) -> u16 {
     let low = unsafe { *ptr.add(1) } as u16;
 
     (high << 8) | low
+}
+
+#[inline(always)]
+fn log_http_method(
+    ctx: &XdpContext,
+    src_addr: [u8; 4],
+    dst_addr: [u8; 4],
+    src_port: u16,
+    dst_port: u16,
+    tcp_data_offset: u8,
+) {
+    let payload_offset = match tcp_data_offset {
+        5 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + TCP_MIN_HDR_LEN,
+        6 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 24,
+        7 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 28,
+        8 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 32,
+        9 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 36,
+        10 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 40,
+        11 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 44,
+        12 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 48,
+        13 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 52,
+        14 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 56,
+        15 => TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 60,
+        _ => return,
+    };
+
+    let payload = match ptr_at::<[u8; 4]>(ctx, payload_offset) {
+        Ok(payload) => payload as *const u8,
+        Err(_) => return,
+    };
+    let b0 = unsafe { *payload };
+    let b1 = unsafe { *payload.add(1) };
+    let b2 = unsafe { *payload.add(2) };
+    let b3 = unsafe { *payload.add(3) };
+
+    if b0 == b'G' && b1 == b'E' && b2 == b'T' && b3 == b' ' {
+        info!(
+            ctx,
+            "detected HTTP GET: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
+            src_addr[0],
+            src_addr[1],
+            src_addr[2],
+            src_addr[3],
+            src_port,
+            dst_addr[0],
+            dst_addr[1],
+            dst_addr[2],
+            dst_addr[3],
+            dst_port
+        );
+    } else if b0 == b'P' && b1 == b'O' && b2 == b'S' && b3 == b'T' {
+        info!(
+            ctx,
+            "detected HTTP POST: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
+            src_addr[0],
+            src_addr[1],
+            src_addr[2],
+            src_addr[3],
+            src_port,
+            dst_addr[0],
+            dst_addr[1],
+            dst_addr[2],
+            dst_addr[3],
+            dst_port
+        );
+    }
 }
 
 #[cfg(not(test))]
