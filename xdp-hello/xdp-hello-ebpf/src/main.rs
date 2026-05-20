@@ -1,9 +1,15 @@
 #![no_std]
 #![no_main]
 
-use aya_ebpf::{bindings::xdp_action, macros::xdp, programs::XdpContext};
+use aya_ebpf::{
+    bindings::xdp_action,
+    macros::{map, xdp},
+    maps::RingBuf,
+    programs::XdpContext,
+};
 use aya_log_ebpf::info;
 use core::mem;
+use xdp_hello_common::FlowEvent;
 
 const ETH_HDR_LEN: usize = 14;
 const ETH_P_IP: u16 = 0x0800;
@@ -20,6 +26,9 @@ const IPV4_MIN_HDR_LEN: usize = 20;
 const TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS: usize = ETH_HDR_LEN + IPV4_MIN_HDR_LEN;
 const TCP_DATA_OFFSET_OFFSET: usize = TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS + 12;
 const TCP_MIN_HDR_LEN: usize = 20;
+
+#[map]
+static EVENTS: RingBuf = RingBuf::with_byte_size(1 << 20, 0);
 
 #[xdp]
 pub fn xdp_hello(ctx: XdpContext) -> u32 {
@@ -58,6 +67,7 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
         IPPROTO_ICMP => {
             let icmp = ptr_at::<u8>(&ctx, transport_offset)?;
             let icmp_type = unsafe { *icmp };
+            emit_flow_event(src_addr, dst_addr, 0, 0, IPPROTO_ICMP);
             info!(
                 &ctx,
                 "received IPv4 ICMP packet: src={}.{}.{}.{}, dst={}.{}.{}.{}, type={}",
@@ -77,6 +87,7 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
             let src_port = read_be_u16_at(ports);
             let dst_port = read_be_u16_at(unsafe { ports.add(2) });
             let tcp_data_offset = read_u8(&ctx, TCP_DATA_OFFSET_OFFSET)? >> 4;
+            emit_flow_event(src_addr, dst_addr, src_port, dst_port, IPPROTO_TCP);
             info!(
                 &ctx,
                 "received IPv4 TCP packet: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
@@ -104,6 +115,7 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
             let ports = ptr_at::<[u8; 4]>(&ctx, transport_offset)? as *const u8;
             let src_port = read_be_u16_at(ports);
             let dst_port = read_be_u16_at(unsafe { ports.add(2) });
+            emit_flow_event(src_addr, dst_addr, src_port, dst_port, IPPROTO_UDP);
             info!(
                 &ctx,
                 "received IPv4 UDP packet: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
@@ -235,6 +247,29 @@ fn log_http_method(
             dst_port
         );
     }
+}
+
+#[inline(always)]
+fn emit_flow_event(
+    src_addr: [u8; 4],
+    dst_addr: [u8; 4],
+    src_port: u16,
+    dst_port: u16,
+    protocol: u8,
+) {
+    let Some(mut entry) = EVENTS.reserve::<FlowEvent>(0) else {
+        return;
+    };
+
+    entry.write(FlowEvent {
+        src_addr,
+        dst_addr,
+        src_port,
+        dst_port,
+        protocol,
+        _pad: [0; 3],
+    });
+    entry.submit(0);
 }
 
 #[cfg(not(test))]
