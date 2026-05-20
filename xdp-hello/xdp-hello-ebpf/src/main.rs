@@ -14,6 +14,8 @@ const IPPROTO_UDP: u8 = 17;
 const ETH_TYPE_OFFSET: usize = 12;
 const IPV4_VERSION_IHL_OFFSET: usize = ETH_HDR_LEN;
 const IPV4_PROTOCOL_OFFSET: usize = ETH_HDR_LEN + 9;
+const IPV4_SRC_ADDR_OFFSET: usize = ETH_HDR_LEN + 12;
+const IPV4_DST_ADDR_OFFSET: usize = ETH_HDR_LEN + 16;
 const IPV4_MIN_HDR_LEN: usize = 20;
 const TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS: usize = ETH_HDR_LEN + IPV4_MIN_HDR_LEN;
 
@@ -47,12 +49,26 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
     }
 
     let protocol = read_u8(&ctx, IPV4_PROTOCOL_OFFSET)?;
+    let src_addr = read_ipv4_addr(&ctx, IPV4_SRC_ADDR_OFFSET)?;
+    let dst_addr = read_ipv4_addr(&ctx, IPV4_DST_ADDR_OFFSET)?;
     let transport_offset = TRANSPORT_OFFSET_WITHOUT_IPV4_OPTIONS;
     match protocol {
         IPPROTO_ICMP => {
             let icmp = ptr_at::<u8>(&ctx, transport_offset)?;
             let icmp_type = unsafe { *icmp };
-            info!(&ctx, "received IPv4 ICMP packet: type={}", icmp_type);
+            info!(
+                &ctx,
+                "received IPv4 ICMP packet: src={}.{}.{}.{}, dst={}.{}.{}.{}, type={}",
+                src_addr[0],
+                src_addr[1],
+                src_addr[2],
+                src_addr[3],
+                dst_addr[0],
+                dst_addr[1],
+                dst_addr[2],
+                dst_addr[3],
+                icmp_type
+            );
         }
         IPPROTO_TCP => {
             let ports = ptr_at::<[u8; 4]>(&ctx, transport_offset)? as *const u8;
@@ -60,7 +76,17 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
             let dst_port = read_be_u16_at(unsafe { ports.add(2) });
             info!(
                 &ctx,
-                "received IPv4 TCP packet: src_port={}, dst_port={}", src_port, dst_port
+                "received IPv4 TCP packet: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
+                src_addr[0],
+                src_addr[1],
+                src_addr[2],
+                src_addr[3],
+                src_port,
+                dst_addr[0],
+                dst_addr[1],
+                dst_addr[2],
+                dst_addr[3],
+                dst_port
             );
         }
         IPPROTO_UDP => {
@@ -69,7 +95,17 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
             let dst_port = read_be_u16_at(unsafe { ports.add(2) });
             info!(
                 &ctx,
-                "received IPv4 UDP packet: src_port={}, dst_port={}", src_port, dst_port
+                "received IPv4 UDP packet: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
+                src_addr[0],
+                src_addr[1],
+                src_addr[2],
+                src_addr[3],
+                src_port,
+                dst_addr[0],
+                dst_addr[1],
+                dst_addr[2],
+                dst_addr[3],
+                dst_port
             );
         }
         _ => info!(&ctx, "received IPv4 packet with other protocol"),
@@ -102,6 +138,18 @@ fn read_be_u16(ctx: &XdpContext, offset: usize) -> Result<u16, u32> {
     let low = read_u8(ctx, offset + 1)? as u16;
 
     Ok((high << 8) | low)
+}
+
+#[inline(always)]
+fn read_ipv4_addr(ctx: &XdpContext, offset: usize) -> Result<[u8; 4], u32> {
+    let addr = ptr_at::<[u8; 4]>(ctx, offset)? as *const u8;
+
+    Ok([
+        unsafe { *addr },
+        unsafe { *addr.add(1) },
+        unsafe { *addr.add(2) },
+        unsafe { *addr.add(3) },
+    ])
 }
 
 #[inline(always)]
