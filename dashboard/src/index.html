@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XDP Sentinel — eBPF Live Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="flash" class="flash"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">▲</span>
+        <div class="brand-text">
+          <h1>XDP&nbsp;SENTINEL</h1>
+          <p>eBPF / XDP 透明な盾 — リアルタイム可視化</p>
+        </div>
+      </div>
+      <div class="status-cluster">
+        <button id="demoBtn" class="demo-btn" type="button">デモデータ: OFF</button>
+        <div id="statusPill" class="status-pill status-off">
+          <span class="dot"></span>
+          <span id="statusText">未接続</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid">
+      <!-- 1. パケットストリーム・タコメーター -->
+      <section class="card tachometer">
+        <h2>パケットストリーム・タコメーター</h2>
+        <div class="gauge-wrap">
+          <canvas id="gauge" width="420" height="260"></canvas>
+          <div class="gauge-readout">
+            <div id="ppsValue" class="pps-value">0</div>
+            <div class="pps-unit">packets / sec</div>
+          </div>
+        </div>
+        <div class="stat-row">
+          <div class="stat">
+            <span class="stat-label">累計検問パケット</span>
+            <span id="totalValue" class="stat-value">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">ピーク PPS</span>
+            <span id="peakValue" class="stat-value">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. アタック・アラート・フラッシュ -->
+      <section class="card alerts">
+        <h2>アタック・アラート・フラッシュ</h2>
+        <div id="shield" class="shield shield-ok">
+          <span id="shieldText">SHIELD ONLINE — 異常なし</span>
+        </div>
+        <ul id="alertLog" class="alert-log">
+          <li class="alert-empty">レート閾値の超過を待機中…</li>
+        </ul>
+      </section>
+
+      <!-- パケットの滝 -->
+      <section class="card waterfall">
+        <h2>パケットの滝 <small>（XDP を通過した検問の流れ）</small></h2>
+        <canvas id="stream" width="900" height="320"></canvas>
+      </section>
+
+      <!-- 3. CPU/メモリ 負荷ゼロの証明 -->
+      <section class="card loadcmp">
+        <h2>「負荷ゼロ」の証明 — CPU 使用率比較</h2>
+        <div class="bars">
+          <div class="bar-group">
+            <div class="bar-track">
+              <div class="bar bar-legacy" id="barLegacy"><span class="bar-val" id="legacyVal">38%</span></div>
+            </div>
+            <div class="bar-caption">従来型 IPS<br /><small>(ユーザー空間で全パケットコピー)</small></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-track">
+              <div class="bar bar-ebpf" id="barEbpf"><span class="bar-val" id="ebpfVal">1.2%</span></div>
+            </div>
+            <div class="bar-caption">XDP / eBPF<br /><small>(カーネル内で検問・透明な盾)</small></div>
+          </div>
+        </div>
+        <p class="loadcmp-note">
+          同じトラフィック量を処理しても、カーネル内で完結する eBPF は
+          電子カルテ本体の CPU を<strong>ほとんど削りません</strong>。
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

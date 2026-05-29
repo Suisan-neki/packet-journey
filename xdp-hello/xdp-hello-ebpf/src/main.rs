@@ -10,7 +10,7 @@ use aya_ebpf::{
 };
 use aya_log_ebpf::{info, warn};
 use core::mem;
-use xdp_hello_common::FlowEvent;
+use xdp_hello_common::{EVENT_KIND_FLOW, EVENT_KIND_RATE_ALERT, FlowEvent};
 
 const ETH_HDR_LEN: usize = 14;
 const ETH_P_IP: u16 = 0x0800;
@@ -277,12 +277,33 @@ fn emit_flow_event(
     };
 
     entry.write(FlowEvent {
+        kind: EVENT_KIND_FLOW,
+        protocol,
+        _pad: [0; 2],
         src_addr,
         dst_addr,
         src_port,
         dst_port,
-        protocol,
-        _pad: [0; 3],
+        rate: 0,
+    });
+    entry.submit(0);
+}
+
+#[inline(always)]
+fn emit_rate_alert(dst_addr: [u8; 4], rate: u32) {
+    let Some(mut entry) = EVENTS.reserve::<FlowEvent>(0) else {
+        return;
+    };
+
+    entry.write(FlowEvent {
+        kind: EVENT_KIND_RATE_ALERT,
+        protocol: 0,
+        _pad: [0; 2],
+        src_addr: [0; 4],
+        dst_addr,
+        src_port: 0,
+        dst_port: 0,
+        rate,
     });
     entry.submit(0);
 }
@@ -304,6 +325,7 @@ fn detect_packet_rate(ctx: &XdpContext, dst_addr: [u8; 4]) {
             (*window).count += 1;
             if (*window).count >= PACKET_RATE_THRESHOLD && (*window).warned == 0 {
                 (*window).warned = 1;
+                let rate = (*window).count;
                 warn!(
                     ctx,
                     "high packet rate: dst={}.{}.{}.{}, count={} in 1s",
@@ -311,8 +333,9 @@ fn detect_packet_rate(ctx: &XdpContext, dst_addr: [u8; 4]) {
                     dst_addr[1],
                     dst_addr[2],
                     dst_addr[3],
-                    (*window).count
+                    rate
                 );
+                emit_rate_alert(dst_addr, rate);
             }
         },
         None => {
