@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "dashboard",
+  "productName": "XDP Hello ダッシュボード",
   "version": "0.1.0",
   "identifier": "dev.xdphello.dashboard",
   "build": {
@@ -13,9 +13,12 @@
     "windows": [
       {
         "label": "main",
-        "title": "Hello Tauri",
-        "width": 800,
-        "height": 600
+        "title": "XDP Hello ダッシュボード",
+        "width": 960,
+        "height": 600,
+        "minWidth": 720,
+        "minHeight": 480,
+        "resizable": true
       }
     ],
     "security": {

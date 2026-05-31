@@ -1,34 +1,87 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hello Tauri</title>
+    <title>XDP Hello ダッシュボード</title>
     <script type="module" src="/src/main.js" defer></script>
   </head>
 
   <body>
-    <main class="container">
-      <h1>Hello Tauri</h1>
+    <main class="dashboard">
+      <section class="topbar">
+        <div>
+          <p class="eyebrow">XDP / eBPF リアルタイム監視</p>
+          <h1>パケット観測ダッシュボード</h1>
+          <p class="subtitle">ユーザー空間プログラムが送る NDJSON（<code>127.0.0.1:9000</code>）を表示します</p>
+        </div>
+        <div class="status-strip">
+          <span id="stream-dot" class="status-dot waiting"></span>
+          <span id="stream-status">待機中</span>
+          <button id="demo-toggle" class="icon-button" type="button" aria-pressed="false" title="実データなしで画面だけ動かす">
+            デモ
+          </button>
+        </div>
+      </section>
 
-      <div class="row">
-        <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript" target="_blank">
-          <img src="/src/assets/javascript.svg" class="logo vanilla" alt="JavaScript logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/src/assets/tauri.svg" class="logo tauri" alt="Tauri logo" />
-        </a>
-      </div>
+      <section class="metrics-grid">
+        <article class="meter-panel">
+          <div class="panel-heading">
+            <span>秒間パケット数（PPS）</span>
+            <strong id="pps-value">0</strong>
+          </div>
+          <canvas id="pps-meter" aria-label="PPS メーター"></canvas>
+        </article>
 
-      <p>Click on the Tauri logo to learn more about the framework.</p>
+        <article class="stats-panel">
+          <div class="stat">
+            <span>累計パケット数</span>
+            <strong id="total-value">0</strong>
+          </div>
+          <div class="stat">
+            <span>直近のプロトコル</span>
+            <strong id="protocol-value">—</strong>
+          </div>
+          <div class="stat">
+            <span>レート超過アラート</span>
+            <strong id="alert-count">0</strong>
+          </div>
+        </article>
+      </section>
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
+      <section class="visual-grid">
+        <article class="waterfall-panel">
+          <div class="panel-heading">
+            <span>パケットの滝（直近のフロー）</span>
+            <strong id="flow-count">0 件</strong>
+          </div>
+          <canvas id="waterfall" aria-label="フロー時系列"></canvas>
+        </article>
 
-      <p id="greet-msg"></p>
+        <article class="side-panel">
+          <div class="panel-heading">
+            <span>CPU 負荷の比較（参考）</span>
+          </div>
+          <p class="panel-note">※ 固定の見本値です。実測ではありません。</p>
+          <div class="cpu-row">
+            <span>従来型スタック</span>
+            <div class="bar"><i class="legacy"></i></div>
+            <strong>78%</strong>
+          </div>
+          <div class="cpu-row">
+            <span>eBPF / XDP</span>
+            <div class="bar"><i class="xdp"></i></div>
+            <strong>7%</strong>
+          </div>
+          <div class="panel-heading panel-heading--sub">
+            <span>直近のアラート</span>
+          </div>
+          <div class="alert-log" id="alert-log"></div>
+        </article>
+      </section>
+
+      <div id="attack-flash" class="attack-flash" aria-hidden="true"></div>
     </main>
   </body>
 </html>

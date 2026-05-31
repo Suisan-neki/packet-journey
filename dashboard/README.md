@@ -1,13 +1,25 @@
-# Hello Tauri
+# XDP Hello ダッシュボード
 
-This is the vanilla Tauri starter app for the dashboard workspace.
+Tauri 製のリアルタイム可視化 UI です。`xdp-hello` のユーザー空間プログラムが `127.0.0.1:9000` に送る NDJSON を読み、画面に反映します。
 
-## Development
+## 起動
 
 ```shell
+cd dashboard
 npm install
 npm run tauri dev
 ```
 
-The app starts from the default greeting flow: type a name, click `Greet`, and
-the frontend calls the Rust `greet` command.
+## 画面の見方
+
+| 領域 | 意味 |
+|------|------|
+| 接続状態 | `127.0.0.1:9000` への TCP 接続。待機中 → 接続中 → 切断を繰り返します |
+| 秒間パケット数（PPS） | ストリームの `stats` イベントから更新 |
+| パケットの滝 | `flow` イベントを時系列で描画（色は TCP / UDP / ICMP） |
+| レート超過アラート | `alert` イベント。画面が赤くフラッシュします |
+| デモ | 実データなしで UI だけ動かすモード |
+
+## 前提
+
+ユーザー空間プログラムを起動し、NDJSON ストリームが `9000` 番で待ち受けている必要があります。未起動のときは右上が「待機中」のままです。
