@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
-const EVENT_STREAM_ADDR: &str = "127.0.0.1:9000";
+const EVENT_STREAM_ADDR: &str = "127.0.0.1:9010";
 
 fn spawn_packet_stream(app: tauri::AppHandle) {
     thread::spawn(move || loop {

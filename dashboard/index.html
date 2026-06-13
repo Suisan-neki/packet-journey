@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>XDP Hello ダッシュボード</title>
+    <title>観測コア ダッシュボード</title>
     <script type="module" src="/src/main.js" defer></script>
   </head>
 
@@ -12,9 +12,11 @@
     <main class="dashboard">
       <section class="topbar">
         <div>
-          <p class="eyebrow">XDP / eBPF リアルタイム監視</p>
-          <h1>パケット観測ダッシュボード</h1>
-          <p class="subtitle">ユーザー空間プログラムが送る NDJSON（<code>127.0.0.1:9000</code>）を表示します</p>
+          <p class="eyebrow">低レイヤ観測コア / Mac 検証環境</p>
+          <h1>観測コア ダッシュボード</h1>
+          <p class="subtitle">
+            observation-hub が配信する NDJSON（<code>127.0.0.1:9010</code>）を表示します
+          </p>
         </div>
         <div class="status-strip">
           <span id="stream-dot" class="status-dot waiting"></span>
@@ -25,60 +27,122 @@
         </div>
       </section>
 
-      <section class="metrics-grid">
-        <article class="meter-panel">
-          <div class="panel-heading">
-            <span>秒間パケット数（PPS）</span>
-            <strong id="pps-value">0</strong>
-          </div>
-          <canvas id="pps-meter" aria-label="PPS メーター"></canvas>
-        </article>
+      <nav class="view-tabs" aria-label="画面切替">
+        <button class="view-tab active" type="button" data-view="tech">技術デモ</button>
+        <button class="view-tab" type="button" data-view="clinical">初動判断</button>
+        <button class="view-tab" type="button" data-view="degraded">縮退ビュー</button>
+      </nav>
 
-        <article class="stats-panel">
-          <div class="stat">
-            <span>累計パケット数</span>
-            <strong id="total-value">0</strong>
-          </div>
-          <div class="stat">
-            <span>直近のプロトコル</span>
-            <strong id="protocol-value">—</strong>
-          </div>
-          <div class="stat">
-            <span>レート超過アラート</span>
-            <strong id="alert-count">0</strong>
-          </div>
-        </article>
+      <section id="view-tech" class="view-panel">
+        <section class="metrics-grid">
+          <article class="meter-panel">
+            <div class="panel-heading">
+              <span>秒間パケット数（PPS）</span>
+              <strong id="pps-value">0</strong>
+            </div>
+            <canvas id="pps-meter" aria-label="PPS メーター"></canvas>
+          </article>
+
+          <article class="stats-panel">
+            <div class="stat">
+              <span>累計パケット数</span>
+              <strong id="total-value">0</strong>
+            </div>
+            <div class="stat">
+              <span>直近のプロトコル</span>
+              <strong id="protocol-value">—</strong>
+            </div>
+            <div class="stat">
+              <span>レート超過アラート</span>
+              <strong id="alert-count">0</strong>
+            </div>
+          </article>
+        </section>
+
+        <section class="visual-grid">
+          <article class="waterfall-panel">
+            <div class="panel-heading">
+              <span>パケットの滝（直近のフロー）</span>
+              <strong id="flow-count">0 件</strong>
+            </div>
+            <canvas id="waterfall" aria-label="フロー時系列"></canvas>
+          </article>
+
+          <article class="side-panel">
+            <div class="panel-heading">
+              <span>CPU 負荷の比較（参考）</span>
+            </div>
+            <p class="panel-note">※ 固定の見本値です。実測ではありません。</p>
+            <div class="cpu-row">
+              <span>従来型スタック</span>
+              <div class="bar"><i class="legacy"></i></div>
+              <strong>78%</strong>
+            </div>
+            <div class="cpu-row">
+              <span>eBPF / XDP</span>
+              <div class="bar"><i class="xdp"></i></div>
+              <strong>7%</strong>
+            </div>
+            <div class="panel-heading panel-heading--sub">
+              <span>直近のアラート</span>
+            </div>
+            <div class="alert-log" id="alert-log"></div>
+          </article>
+        </section>
       </section>
 
-      <section class="visual-grid">
-        <article class="waterfall-panel">
-          <div class="panel-heading">
-            <span>パケットの滝（直近のフロー）</span>
-            <strong id="flow-count">0 件</strong>
+      <section id="view-clinical" class="view-panel" hidden>
+        <article class="clinical-hero">
+          <div class="clinical-hero__copy">
+            <p class="eyebrow">画面B / 医療従事者向け</p>
+            <h2 id="clinical-headline">現在、異常は検知されていません</h2>
+            <p id="clinical-summary" class="clinical-summary">
+              低レイヤ観測からの事実のみに基づき、初動の判断材料を提示します。AI は意思決定の主体ではありません。
+            </p>
           </div>
-          <canvas id="waterfall" aria-label="フロー時系列"></canvas>
+          <div id="clinical-badge" class="clinical-badge clinical-badge--calm">平時</div>
         </article>
 
-        <article class="side-panel">
-          <div class="panel-heading">
-            <span>CPU 負荷の比較（参考）</span>
+        <section class="clinical-grid">
+          <article class="clinical-card">
+            <div class="panel-heading">
+              <span>いますぐ動けること</span>
+            </div>
+            <ol id="clinical-actions" class="action-list">
+              <li class="action-item action-item--calm">異常検知時に、ここへ可逆的な初動手順が表示されます。</li>
+            </ol>
+          </article>
+
+          <article class="clinical-card">
+            <div class="panel-heading">
+              <span>影響範囲</span>
+            </div>
+            <p id="clinical-unaffected" class="clinical-note">影響範囲のメモがここに表示されます。</p>
+            <div class="panel-heading panel-heading--sub">
+              <span>根拠データ（遡及可能）</span>
+            </div>
+            <ul id="clinical-sources" class="source-list">
+              <li>ソースデータは観測イベントから自動生成されます。</li>
+            </ul>
+          </article>
+        </section>
+      </section>
+
+      <section id="view-degraded" class="view-panel" hidden>
+        <article class="degraded-banner">
+          <div>
+            <p class="eyebrow">ステップ③ / 最小限の診療継続</p>
+            <h2>縮退ビュー（模擬 FHIR）</h2>
+            <p id="degraded-note" class="clinical-summary">
+              通常復旧が間に合わない場合に、救出済みの最小限データを隔離表示します。表示中のデータは模擬です。
+            </p>
           </div>
-          <p class="panel-note">※ 固定の見本値です。実測ではありません。</p>
-          <div class="cpu-row">
-            <span>従来型スタック</span>
-            <div class="bar"><i class="legacy"></i></div>
-            <strong>78%</strong>
-          </div>
-          <div class="cpu-row">
-            <span>eBPF / XDP</span>
-            <div class="bar"><i class="xdp"></i></div>
-            <strong>7%</strong>
-          </div>
-          <div class="panel-heading panel-heading--sub">
-            <span>直近のアラート</span>
-          </div>
-          <div class="alert-log" id="alert-log"></div>
         </article>
+        <div id="patient-grid" class="patient-grid">
+          <article class="patient-card patient-card--empty">
+            <p>複合障害シナリオ検知時に、模擬患者リストがここへ表示されます。</p>
+          </article>
+        </div>
       </section>
 
       <div id="attack-flash" class="attack-flash" aria-hidden="true"></div>

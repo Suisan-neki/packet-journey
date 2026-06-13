@@ -7,6 +7,18 @@ const STATUS_LABELS = {
   demo: "デモ",
 };
 
+const CAUSE_LABELS = {
+  network: "通信異常",
+  physical: "物理環境",
+  combined: "複合（物理＋通信）",
+};
+
+const SEVERITY_LABELS = {
+  watch: "注意",
+  urgent: "緊急",
+  critical: "直ちに対応",
+};
+
 const state = {
   pps: 0,
   total: 0,
@@ -16,6 +28,9 @@ const state = {
   demo: false,
   demoTimer: null,
   lastProtocol: "—",
+  activeView: "tech",
+  guidance: null,
+  fhirSnapshot: null,
 };
 
 const protocolColors = {
@@ -40,6 +55,20 @@ function cacheElements() {
   els.flash = document.querySelector("#attack-flash");
   els.meter = document.querySelector("#pps-meter");
   els.waterfall = document.querySelector("#waterfall");
+  els.viewTabs = document.querySelectorAll(".view-tab");
+  els.viewPanels = {
+    tech: document.querySelector("#view-tech"),
+    clinical: document.querySelector("#view-clinical"),
+    degraded: document.querySelector("#view-degraded"),
+  };
+  els.clinicalHeadline = document.querySelector("#clinical-headline");
+  els.clinicalSummary = document.querySelector("#clinical-summary");
+  els.clinicalBadge = document.querySelector("#clinical-badge");
+  els.clinicalActions = document.querySelector("#clinical-actions");
+  els.clinicalUnaffected = document.querySelector("#clinical-unaffected");
+  els.clinicalSources = document.querySelector("#clinical-sources");
+  els.degradedNote = document.querySelector("#degraded-note");
+  els.patientGrid = document.querySelector("#patient-grid");
 }
 
 function setStatus(status) {
@@ -81,6 +110,28 @@ function handleEvent(event) {
     });
     state.flows = state.flows.slice(-140);
     updateStats();
+    return;
+  }
+
+  if (event.type === "sensor") {
+    return;
+  }
+
+  if (event.type === "guidance") {
+    state.guidance = event;
+    renderClinical(event);
+    if (event.degraded) {
+      switchView("degraded");
+    } else {
+      switchView("clinical");
+    }
+    return;
+  }
+
+  if (event.type === "fhir_snapshot") {
+    state.fhirSnapshot = event;
+    renderDegraded(event);
+    switchView("degraded");
   }
 }
 
@@ -107,6 +158,97 @@ function addAlert(event) {
   while (els.alertLog.children.length > 5) {
     els.alertLog.lastElementChild.remove();
   }
+}
+
+function renderClinical(guidance) {
+  const severity = guidance.severity ?? "watch";
+  const cause = guidance.cause ?? "network";
+
+  els.clinicalHeadline.textContent = guidance.headline ?? "異常を検知しました";
+  els.clinicalSummary.textContent =
+    guidance.summary ?? "低レイヤ観測に基づく初動判断です。";
+  els.clinicalBadge.textContent = `${SEVERITY_LABELS[severity] ?? severity} / ${
+    CAUSE_LABELS[cause] ?? cause
+  }`;
+  els.clinicalBadge.className = `clinical-badge clinical-badge--${severity}`;
+
+  els.clinicalActions.replaceChildren();
+  const actions = guidance.actions ?? [];
+  if (actions.length === 0) {
+    const item = document.createElement("li");
+    item.className = "action-item action-item--calm";
+    item.textContent = "初動手順はありません。";
+    els.clinicalActions.appendChild(item);
+  } else {
+    actions
+      .slice()
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+      .forEach((action) => {
+        const item = document.createElement("li");
+        item.className = "action-item";
+        item.textContent = action.text ?? "";
+        els.clinicalActions.appendChild(item);
+      });
+  }
+
+  els.clinicalUnaffected.textContent =
+    guidance.unaffected_note ?? "影響範囲の追加情報はありません。";
+
+  els.clinicalSources.replaceChildren();
+  const sources = guidance.sources ?? [];
+  if (sources.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "根拠データはありません。";
+    els.clinicalSources.appendChild(item);
+  } else {
+    sources.forEach((source) => {
+      const item = document.createElement("li");
+      item.innerHTML = `<strong>${source.kind ?? "source"}</strong> ${source.detail ?? ""}`;
+      els.clinicalSources.appendChild(item);
+    });
+  }
+}
+
+function renderDegraded(snapshot) {
+  els.degradedNote.textContent =
+    snapshot.note ??
+    "模擬 FHIR データです。実診療データの救出は検証用の設計可能性確認のみを目的としています。";
+
+  const patients = snapshot.patients ?? [];
+  els.patientGrid.replaceChildren();
+
+  if (patients.length === 0) {
+    const card = document.createElement("article");
+    card.className = "patient-card patient-card--empty";
+    card.innerHTML = "<p>表示できる患者データがありません。</p>";
+    els.patientGrid.appendChild(card);
+    return;
+  }
+
+  patients.forEach((patient) => {
+    const card = document.createElement("article");
+    card.className = "patient-card";
+    card.innerHTML = `
+      <header class="patient-card__header">
+        <strong>${patient.name ?? "不明"}</strong>
+        <span>${patient.room ?? "—"}</span>
+      </header>
+      <p class="patient-card__id">ID: ${patient.id ?? "—"}</p>
+      <p class="patient-card__complaint">${patient.chief_complaint ?? ""}</p>
+      <p class="patient-card__vitals">${patient.last_vitals ?? ""}</p>
+    `;
+    els.patientGrid.appendChild(card);
+  });
+}
+
+function switchView(view) {
+  state.activeView = view;
+  els.viewTabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.view === view);
+  });
+  Object.entries(els.viewPanels).forEach(([key, panel]) => {
+    panel.hidden = key !== view;
+  });
 }
 
 function fitCanvasToDisplay(canvas) {
@@ -242,6 +384,40 @@ function emitDemoFlow() {
   updateStats();
 }
 
+function emitDemoGuidance() {
+  handleEvent({
+    type: "guidance",
+    scenario: "lateral_movement",
+    cause: "network",
+    severity: "critical",
+    headline: "受付端末から異常な横展開通信を検知しました",
+    summary: "端末 10.10.0.50 が短時間に多数の宛先へ不審な通信を送信しています。",
+    actions: [
+      {
+        priority: 1,
+        text: "直ちに端末 10.10.0.50 の LAN ケーブルを物理的に抜くか、Wi-Fi をオフにしてください。",
+        reversible: true,
+      },
+      {
+        priority: 2,
+        text: "その端末での電子カルテの操作を直ちに中止してください。",
+        reversible: true,
+      },
+      {
+        priority: 3,
+        text: "他の診察室の端末は通常通り利用可能です。",
+        reversible: true,
+      },
+    ],
+    unaffected_note: "他の診察室の端末は通常通り利用可能です。",
+    sources: [
+      { kind: "flow", detail: "src=10.10.0.50 が 10 宛先へ短時間接続" },
+      { kind: "rule", detail: "lateral_movement: unique_dst>=8 within 5s" },
+    ],
+    degraded: false,
+  });
+}
+
 function toggleDemo() {
   state.demo = !state.demo;
   els.demoToggle.setAttribute("aria-pressed", String(state.demo));
@@ -249,7 +425,12 @@ function toggleDemo() {
 
   if (state.demo) {
     setStatus("demo");
-    state.demoTimer = window.setInterval(emitDemoFlow, 180);
+    state.demoTimer = window.setInterval(() => {
+      emitDemoFlow();
+      if (Math.random() > 0.7) {
+        emitDemoGuidance();
+      }
+    }, 1800);
     return;
   }
 
@@ -283,6 +464,9 @@ window.addEventListener("DOMContentLoaded", () => {
   updateStats();
   setStatus("waiting");
   els.demoToggle.addEventListener("click", toggleDemo);
+  els.viewTabs.forEach((tab) => {
+    tab.addEventListener("click", () => switchView(tab.dataset.view));
+  });
   setupCanvasSizing();
   subscribeTauriEvents();
   animate();
