@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { subscribeStream } from "./stream.js";
 
 const STATUS_LABELS = {
   waiting: "待機中",
@@ -439,24 +439,24 @@ function toggleDemo() {
   setStatus(state.status === "demo" ? "waiting" : state.status);
 }
 
-async function subscribeTauriEvents() {
-  await listen("stream-status", (event) => {
-    if (!state.demo) {
-      setStatus(event.payload);
-    }
+async function connectStream() {
+  const mode = await subscribeStream({
+    onStatus(status) {
+      if (!state.demo) {
+        setStatus(status);
+      }
+    },
+    onEvent(event) {
+      if (state.demo) {
+        return;
+      }
+      handleEvent(event);
+    },
   });
 
-  await listen("packet-event", (event) => {
-    if (state.demo) {
-      return;
-    }
-
-    try {
-      handleEvent(JSON.parse(event.payload));
-    } catch {
-      // Malformed lines are ignored so a single bad event does not stop the dashboard.
-    }
-  });
+  if (mode === "web" && !state.demo) {
+    toggleDemo();
+  }
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -468,6 +468,6 @@ window.addEventListener("DOMContentLoaded", () => {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
   });
   setupCanvasSizing();
-  subscribeTauriEvents();
+  connectStream();
   animate();
 });
