@@ -7,6 +7,15 @@ const STATUS_LABELS = {
   demo: "デモ（サンプルデータ）",
 };
 
+const LAYER_NARRATION = {
+  idle: "ボタンを押すと、高レイヤの操作から低レイヤの観測へ視点が移ります",
+  high: "高レイヤ：ボタンやアプリの世界です（「何をしたか」が見える）",
+  descend: "いま、上の操作に対応する通信を下の世界で探しています…",
+  mid: "中レイヤ：操作はパケットという形に変わってネットワークを流れます",
+  low: "低レイヤ：カーネルがパケットを1つずつ観測しています",
+  linked: "つながった！高レイヤの操作と、低レイヤのパケットは同じ出来事です",
+  ascend: "低レイヤで見えたことを、いま画面に戻して表示しています",
+};
 const DEMO_PI_IP = "192.168.1.50";
 const MAX_PACKETS = 12;
 
@@ -47,6 +56,7 @@ const state = {
   highlightSrc: null,
   lastActionLabel: null,
   hasAction: false,
+  currentLayer: "high",
 };
 
 const els = {};
@@ -75,6 +85,14 @@ function cacheElements() {
   els.captureToast = document.querySelector("#capture-toast");
   els.captureToastText = document.querySelector("#capture-toast-text");
   els.flowSteps = document.querySelectorAll(".flow-map__step");
+  els.layerNarration = document.querySelector("#layer-narration");
+  els.layerBridgeCard = document.querySelector("#layer-bridge-card");
+  els.bridgeHighText = document.querySelector("#bridge-high-text");
+  els.bridgeLowText = document.querySelector("#bridge-low-text");
+  els.layerSpan = document.querySelector("#layer-span");
+  els.mainCanvas = document.querySelector("#main-canvas");
+  els.panelLeft = document.querySelector(".panel--left");
+  els.panelRight = document.querySelector(".panel--right");
 }
 
 function protocolMeta(protocol) {
@@ -150,9 +168,41 @@ function formatTime(date = new Date()) {
 }
 
 function setActiveFlowStep(step) {
+  const visualStep =
+    step === "descend" ? "mid" : step === "ascend" ? "linked" : step === "idle" ? "high" : step;
   els.flowSteps.forEach((el) => {
-    el.classList.toggle("flow-map__step--active", el.dataset.step === step);
+    el.classList.toggle("flow-map__step--active", el.dataset.step === visualStep);
   });
+}
+
+function setLayerNarration(key) {
+  if (els.layerNarration && LAYER_NARRATION[key]) {
+    els.layerNarration.textContent = LAYER_NARRATION[key];
+  }
+}
+
+function setActiveLayer(layer) {
+  state.currentLayer = layer;
+  setActiveFlowStep(layer);
+  setLayerNarration(layer);
+
+  els.panelLeft?.classList.toggle("panel--layer-active", layer === "low" || layer === "linked");
+  els.panelRight?.classList.toggle("panel--layer-active", layer === "high" || layer === "linked");
+  els.mainCanvas?.classList.toggle("main-canvas--linked", layer === "linked");
+}
+
+function showLayerBridge(label, protocol, route) {
+  const meta = protocolMeta(protocol);
+  els.bridgeHighText.textContent = `「${label}」ボタンを押した`;
+  els.bridgeLowText.textContent = `${meta.name} パケット ${route}`;
+  els.layerBridgeCard.hidden = false;
+  els.layerSpan.hidden = false;
+}
+
+function hideLayerBridge() {
+  els.layerBridgeCard.hidden = true;
+  els.layerSpan.hidden = true;
+  els.mainCanvas?.classList.remove("main-canvas--linked");
 }
 
 function showCaptureToast(message) {
@@ -174,7 +224,7 @@ function correlatedSummary(label, protocol, src, srcPort, dst, dstPort) {
   const meta = protocolMeta(protocol);
   const route = `${formatEndpoint(src, srcPort)} → ${formatEndpoint(dst, dstPort)}`;
   const purpose = dstPort ? portHint(dstPort) : meta.hint;
-  return `【${label}】の操作は ${meta.name}（${meta.hint}）のパケットとして ${route} を通りました。${purpose} への通信です。`;
+  return `高レイヤの「${label}」は、低レイヤでは ${meta.name} パケット（${route}）として観測されました。${purpose} への通信です。表と裏で、同じ出来事が見えています。`;
 }
 
 function setCurrentAction(text, active = true) {
@@ -308,27 +358,42 @@ function handleEvent(event) {
     state.lastActionLabel = event.label ?? "操作";
     state.hasAction = true;
     setCurrentAction(`【${state.lastActionLabel}】ボタンが押されました`);
-    setActiveFlowStep("flow");
+    hideLayerBridge();
+    setActiveLayer("high");
     window.clearTimeout(state.flowStepTimer);
-    state.flowStepTimer = window.setTimeout(() => setActiveFlowStep("observe"), 400);
-    showCaptureToast("操作を検知しました。対応するパケットを待っています…");
+    state.flowStepTimer = window.setTimeout(() => {
+      setActiveLayer("descend");
+      window.setTimeout(() => setActiveLayer("low"), 500);
+    }, 350);
+    showCaptureToast("高レイヤで操作を検知。低レイヤのパケットを探しています…");
     return;
   }
 
   if (event.type === "action_correlated") {
     const label = event.label ?? state.lastActionLabel ?? "操作";
+    const protocol = event.protocol ?? "TCP";
+    const route = `${formatEndpoint(event.src, event.src_port)} → ${formatEndpoint(
+      event.dst,
+      event.dst_port,
+    )}`;
     setCurrentAction(`【${label}】ボタンが押されました`);
     setBehindData({ ...event, label });
+    showLayerBridge(label, protocol, route);
     state.highlightSrc = event.src;
     state.highlightUntil = performance.now() + 5000;
     window.clearTimeout(state.flowStepTimer);
-    setActiveFlowStep("display");
-    showCaptureToast(
-      `【捕捉】${event.protocol ?? "TCP"} パケットとして ${formatEndpoint(event.src, event.src_port)} から届きました`,
-    );
+    setActiveLayer("linked");
+    showCaptureToast("つながった！高レイヤの操作と、低レイヤのパケットは同じ出来事です");
     pushFlowRow(event, true);
     dropPacket(event, { highlight: true });
-    window.setTimeout(() => setActiveFlowStep("button"), 5000);
+    state.flowStepTimer = window.setTimeout(() => {
+      setActiveLayer("ascend");
+      window.setTimeout(() => {
+        setActiveLayer("high");
+        hideLayerBridge();
+        state.hasAction = false;
+      }, 1200);
+    }, 4500);
     return;
   }
 
@@ -337,6 +402,9 @@ function handleEvent(event) {
     dropPacket(event);
     pushFlowRow(event, false);
     updateStats();
+    if (!state.hasAction && state.currentLayer === "high") {
+      setActiveLayer("mid");
+    }
   }
 }
 
@@ -520,7 +588,8 @@ window.addEventListener("DOMContentLoaded", () => {
   renderFlowList();
   setCurrentAction("ボタンを押すとここに表示されます", false);
   setStatus("waiting");
-  setActiveFlowStep("button");
+  setActiveLayer("high");
+  hideLayerBridge();
   els.demoToggle.addEventListener("click", toggleDemo);
   connectStream();
 });

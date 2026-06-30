@@ -29,21 +29,24 @@
         <span id="stream-status" class="top-nav__status-text">待機中</span>
       </div>
 
-      <div class="flow-map" aria-label="展示の流れ">
-        <div class="flow-map__step flow-map__step--active" data-step="button">
-          <span>ボタンを押す</span>
+      <div class="flow-map" aria-label="レイヤの行き来">
+        <div class="flow-map__step flow-map__step--active" data-step="high">
+          <span class="flow-map__layer">高</span>
+          <span>操作</span>
         </div>
-        <span class="flow-map__arrow" aria-hidden="true">›</span>
-        <div class="flow-map__step" data-step="flow">
-          <span>通信が流れる</span>
+        <span class="flow-map__arrow flow-map__arrow--down" aria-hidden="true">↓</span>
+        <div class="flow-map__step" data-step="mid">
+          <span class="flow-map__layer">中</span>
+          <span>パケット</span>
         </div>
-        <span class="flow-map__arrow" aria-hidden="true">›</span>
-        <div class="flow-map__step" data-step="observe">
-          <span>裏側で観察</span>
+        <span class="flow-map__arrow flow-map__arrow--down" aria-hidden="true">↓</span>
+        <div class="flow-map__step" data-step="low">
+          <span class="flow-map__layer">低</span>
+          <span>カーネル観測</span>
         </div>
-        <span class="flow-map__arrow" aria-hidden="true">›</span>
-        <div class="flow-map__step" data-step="display">
-          <span>画面に表示</span>
+        <span class="flow-map__arrow flow-map__arrow--up" aria-hidden="true">↑</span>
+        <div class="flow-map__step" data-step="linked">
+          <span>つながった</span>
         </div>
       </div>
 
@@ -58,8 +61,21 @@
       </button>
     </nav>
 
-    <main class="main-canvas">
-      <section class="panel panel--left">
+    <main class="main-canvas" id="main-canvas">
+      <div id="layer-span" class="layer-span" hidden aria-hidden="true">
+        <span class="layer-span__chip layer-span__chip--high">高：操作</span>
+        <span class="layer-span__line"></span>
+        <span class="layer-span__label">同じ出来事</span>
+        <span class="layer-span__line"></span>
+        <span class="layer-span__chip layer-span__chip--low">低：パケット</span>
+      </div>
+
+      <section class="panel panel--left panel--low-layer">
+        <header class="panel-header">
+          <span class="layer-tag layer-tag--low">低レイヤ</span>
+          <h2 class="panel-title panel-title--inline">カーネルが見ている世界</h2>
+          <p class="panel-desc">eBPF / XDP が、ネットワークを流れるパケットを観測しています</p>
+        </header>
         <div class="metrics-header">
           <div>
             <h2 class="panel-label">1秒あたりのパケット数</h2>
@@ -76,8 +92,8 @@
 
         <div class="waterfall-intro">
           <p>
-            下に流れる1つ1つが、ネットワークを走る<strong>パケット</strong>（データのかたまり）です。
-            色とラベルは<strong>通信のルール（プロトコル）</strong>を表します。
+            画面に見えない<strong>低レイヤ</strong>では、1つ1つの<strong>パケット</strong>として通信が記録されます。
+            色は通信のルール（プロトコル）です。
           </p>
           <ul class="waterfall-legend" aria-label="プロトコルの凡例">
             <li class="waterfall-legend__item waterfall-legend__item--tcp">
@@ -104,18 +120,40 @@
         </div>
       </section>
 
-      <section class="panel panel--right">
-        <h2 class="panel-title">通信キャプチャ詳細</h2>
+      <section class="panel panel--right panel--high-layer">
+        <header class="panel-header panel-header--compact">
+          <span class="layer-tag layer-tag--high">高レイヤ</span>
+          <h2 class="panel-title panel-title--inline">あなたの操作</h2>
+          <p class="panel-desc">ボタンやアプリの世界。ここでは「何をしたか」が見えます</p>
+        </header>
 
-        <div class="detail-card">
+        <div class="detail-card detail-card--high">
           <h3 class="panel-sublabel">いま行われた操作</h3>
           <p id="current-action" class="current-action current-action--idle">
             ボタンを押すとここに表示されます
           </p>
         </div>
 
-        <div class="detail-card">
-          <h3 class="panel-sublabel">裏側で見えたデータ</h3>
+        <div id="layer-bridge-card" class="layer-bridge-card" hidden>
+          <p class="layer-bridge-card__title">高レイヤと低レイヤは、同じ出来事の表と裏です</p>
+          <div class="layer-bridge-card__cols">
+            <div class="layer-bridge-card__col layer-bridge-card__col--high">
+              <span class="layer-tag layer-tag--high">高</span>
+              <p id="bridge-high-text">—</p>
+            </div>
+            <div class="layer-bridge-card__arrow" aria-hidden="true">⇅</div>
+            <div class="layer-bridge-card__col layer-bridge-card__col--low">
+              <span class="layer-tag layer-tag--low">低</span>
+              <p id="bridge-low-text">—</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-card detail-card--low">
+          <h3 class="panel-sublabel">
+            <span class="layer-tag layer-tag--low layer-tag--inline">低レイヤ</span>
+            裏側で見えたパケット
+          </h3>
           <div id="behind-protocol" class="proto-badge proto-badge--idle">—</div>
           <div class="ip-pair">
             <div class="ip-endpoint">
@@ -129,9 +167,13 @@
             </div>
           </div>
           <p id="behind-summary" class="behind-summary">
-            操作に対応する通信がここに表示されます。
+            操作に対応するパケットが、低レイヤで捕捉されるとここに表示されます。
           </p>
         </div>
+
+        <p id="layer-narration" class="layer-narration" aria-live="polite">
+          ボタンを押すと、高レイヤの操作から低レイヤの観測へ視点が移ります
+        </p>
 
         <div class="flow-list-wrap">
           <div class="flow-list-header" aria-hidden="true">
