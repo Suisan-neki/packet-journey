@@ -10,7 +10,7 @@
   <body>
     <div id="web-banner" class="web-banner" hidden>
       <span>Webデモ</span>
-      <p>実物のボタンの代わりに、画面のボタンで通信を起こせます。</p>
+      <p>実物のボタンの代わりに、画面のボタンで小さな通信を生み出せます。</p>
     </div>
 
     <nav class="top-nav">
@@ -37,11 +37,11 @@
     <main class="main-canvas" id="main-canvas" data-layer="l7">
       <section class="story-panel" aria-labelledby="story-title">
         <header class="story-header">
-          <p class="eyebrow">見えない世界を、のぞいてみよう。</p>
-          <h1 id="story-title">ボタンを押した、その瞬間。<br />通信は旅に出る。</h1>
+          <p class="eyebrow">見えない通信の旅を追う</p>
+          <h1 id="story-title">ボタンを押すと、<br />小さなパケットが旅に出る。</h1>
           <p class="story-lead">
             いつもの操作の裏側では、小さなデータの荷物が生まれています。
-            今日はその旅を、カーネルの最前線まで追いかけます。
+            Packet Journey は、その旅をカーネルの入口まで追いかけ、XDPがつかまえた通信の正体を表示します。
           </p>
         </header>
 
@@ -52,7 +52,7 @@
           </button>
           <div id="physical-prompt" class="physical-prompt">
             <span class="physical-prompt__pulse" aria-hidden="true"></span>
-            <span><strong>机のボタンを押してみて</strong><small>あなたの操作から通信の旅が始まります</small></span>
+            <span><strong>机のボタンを押してみて</strong><small>あなたの操作から、パケットの旅が始まります</small></span>
           </div>
         </div>
 
@@ -62,9 +62,9 @@
               <span class="journey-step__number">1</span>
               <span class="journey-step__layer">L7</span>
             </div>
-            <p class="journey-step__verb">あなたが操作する</p>
+            <p class="journey-step__verb">旅のはじまり</p>
             <p id="current-action" class="current-action current-action--idle">
-              まだ何も押されていません
+              まだパケットは生まれていません
             </p>
           </article>
 
@@ -78,9 +78,9 @@
               <span class="journey-step__number">2</span>
               <span class="journey-step__layer">L4 · L3</span>
             </div>
-            <p class="journey-step__verb">パケットになって進む</p>
+            <p class="journey-step__verb">宛先を持って進む</p>
             <div id="packet-latest" class="packet-latest packet-latest--idle" aria-live="polite">
-              通信が生まれると、ここに正体が現れます
+              パケットが生まれると、ここに行き先が現れます
             </div>
           </article>
 
@@ -94,16 +94,16 @@
               <span class="journey-step__number">3</span>
               <span class="journey-step__layer">L2</span>
             </div>
-            <p id="capture-stage-title" class="journey-step__verb">XDPが待ち構える</p>
+            <p id="capture-stage-title" class="journey-step__verb">カーネルの入口で待つ</p>
             <p id="capture-stage-copy" class="capture-stage-copy">
-              カーネルの入口で、すべてのパケットを見ています
+              XDPが、通り過ぎるパケットを見張っています
             </p>
             <span class="xdp-radar" aria-hidden="true"><i></i></span>
           </article>
         </div>
 
         <p id="layer-narration" class="layer-narration" aria-live="polite">
-          ボタンを押すと、同じ出来事を通信の奥深くまで追いかけます
+          ボタンを押すと、小さなパケットの旅を通信の奥深くまで追いかけます
         </p>
 
         <div class="live-stream">
@@ -112,19 +112,19 @@
               <span class="live-dot" aria-hidden="true"></span>
               <strong>いま、この瞬間にも流れている通信</strong>
             </div>
-            <span>色の違いはパケットの届け方の違いです</span>
+            <span>色の違いは、パケットの旅の仕方の違いです</span>
           </div>
           <div id="waterfall-container" class="waterfall" aria-label="流れるパケット">
-            <p id="waterfall-idle" class="waterfall-idle">パケットを待っています…</p>
+            <p id="waterfall-idle" class="waterfall-idle">まだ旅の記録はありません…</p>
           </div>
         </div>
       </section>
 
       <aside class="discovery-panel" aria-label="通信の詳しい情報">
         <section class="discovery-card discovery-card--result">
-          <p class="section-kicker">見つけた通信</p>
-          <h2>つかまえた通信の正体</h2>
-          <p class="discovery-intro">難しい言葉はあとで大丈夫。まずは「本当に流れている」ことを見てみよう。</p>
+          <p class="section-kicker">観測記録</p>
+          <h2>つかまえたパケットの正体</h2>
+          <p class="discovery-intro">ボタン操作から生まれた通信を、XDPがカーネルの入口で見つけます。どこから来て、どこへ向かったのかをここで確認できます。</p>
 
           <div class="protocol-result">
             <div id="behind-protocol" class="proto-badge proto-badge--idle">まだ待機中</div>
@@ -142,12 +142,12 @@
               </div>
             </div>
             <p id="behind-summary" class="behind-summary">
-              操作に対応するパケットをXDPが捕まえると、ここで旅の正体が分かります。
+              操作に対応するパケットをXDPがつかまえると、ここで旅の正体が分かります。
             </p>
           </div>
 
           <div id="layer-bridge-card" class="layer-bridge-card" hidden>
-            <p class="layer-bridge-card__title">別々に見えて、実は同じ出来事</p>
+            <p class="layer-bridge-card__title">画面の操作と、見えない通信がつながる</p>
             <div class="layer-bridge-card__cols">
               <p id="bridge-high-text">—</p>
               <span aria-hidden="true">＝</span>
@@ -158,7 +158,7 @@
 
         <details class="deep-dive">
           <summary>
-            <span><small>詳しい情報</small>もう少し深く見てみる</span>
+            <span><small>詳しい情報</small>旅の奥をもう少し見る</span>
             <span class="deep-dive__plus" aria-hidden="true">＋</span>
           </summary>
 
@@ -170,8 +170,8 @@
 
             <section class="osi-stack" id="osi-stack" aria-label="OSI参照モデル">
               <header class="osi-stack__header">
-                <h3 class="osi-stack__title">通信のどこを見ている？</h3>
-                <p id="osi-focus" class="osi-focus">いまの視点: L7（操作）</p>
+                <h3 class="osi-stack__title">いま、旅のどこを見ている？</h3>
+                <p id="osi-focus" class="osi-focus">いまの視点: L7（旅のはじまり）</p>
               </header>
               <ol class="osi-stack__layers">
                 <li class="osi-layer" data-osi="7"><span class="osi-layer__num">7</span><span class="osi-layer__name">アプリ</span></li>
@@ -185,13 +185,13 @@
             </section>
 
             <section class="flow-section">
-              <h3>最近見つけたパケット</h3>
+              <h3>最近の旅の記録</h3>
               <div class="flow-list-header" aria-hidden="true"><span>時刻</span><span>種類</span><span>送信元</span><span>宛先</span></div>
               <div id="flow-list" class="flow-list"></div>
             </section>
 
             <section class="alert-wrap">
-              <h3>いつもより多い通信</h3>
+              <h3>流れが急に増えた通信</h3>
               <div id="alert-log" class="alert-log"></div>
             </section>
           </div>
