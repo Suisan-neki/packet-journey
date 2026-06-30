@@ -1,5 +1,7 @@
 import { subscribeStream, isWebDemo } from "./stream.js";
 
+const BUILD_ID = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "local";
+
 const STATUS_LABELS = {
   waiting: "待機中",
   connected: "システム稼働中（通信を観測しています）",
@@ -644,6 +646,10 @@ async function connectStream() {
 
 window.addEventListener("DOMContentLoaded", () => {
   cacheElements();
+  const stamp = document.querySelector("#build-stamp");
+  if (stamp) {
+    stamp.textContent = `build ${BUILD_ID}`;
+  }
   updateStats();
   renderFlowList();
   setCurrentAction("ボタンを押すとここに表示されます", false);

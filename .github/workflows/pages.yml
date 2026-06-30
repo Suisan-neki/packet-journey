@@ -30,6 +30,7 @@ jobs:
         working-directory: dashboard
         env:
           GITHUB_PAGES: "true"
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           npm ci
           npm run build
