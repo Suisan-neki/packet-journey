@@ -1,6 +1,8 @@
-# xdp-hello
+# PACKET JOURNEY
 
 eBPF / XDP でパケットをカーネル層から観測し、リアルタイムに可視化する作品です。技育博向けにラズパイの物理ボタンから実トラフィックを発生させ、捕捉結果を大画面に表示できます。
+
+**Web デモ:** https://suisan-neki.github.io/packet-journey/
 
 学習メモは [docs/journal/](docs/journal/) の日付ファイルに書いています。
 

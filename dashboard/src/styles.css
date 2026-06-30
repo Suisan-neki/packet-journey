@@ -1,23 +1,23 @@
 :root {
-  --bg: #070b12;
-  --surface: #0d131d;
-  --surface-raised: #121b28;
-  --surface-soft: #0a1019;
-  --line: #253247;
-  --line-bright: #3c506d;
-  --text: #f4f7fb;
-  --muted: #98a8bd;
-  --cyan: #57d6ff;
-  --cyan-soft: rgba(87, 214, 255, 0.12);
-  --lime: #80ed99;
-  --lime-soft: rgba(128, 237, 153, 0.12);
-  --amber: #ffbf69;
-  --alert: #ff7474;
-  --tcp: #67e8a5;
-  --udp: #5fd5f2;
-  --icmp: #ffad66;
-  --radius: 18px;
-  --font: "Noto Sans JP", ui-sans-serif, system-ui, sans-serif;
+  --bg: #17191c;
+  --surface: #1d2024;
+  --surface-raised: #24282d;
+  --surface-soft: #191c20;
+  --line: #353a40;
+  --line-bright: #4a5159;
+  --text: #e7e5df;
+  --muted: #a4a7aa;
+  --cyan: #789d99;
+  --cyan-soft: rgba(120, 157, 153, 0.1);
+  --lime: #82977d;
+  --lime-soft: rgba(130, 151, 125, 0.11);
+  --amber: #a98e70;
+  --alert: #ad7070;
+  --tcp: #829d86;
+  --udp: #78959d;
+  --icmp: #a48769;
+  --radius: 10px;
+  --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
@@ -41,9 +41,7 @@ body {
   min-width: 320px;
   flex-direction: column;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 32% -20%, rgba(87, 214, 255, 0.14), transparent 34%),
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
@@ -72,20 +70,19 @@ button {
   justify-content: center;
   gap: 12px;
   padding: 6px 20px;
-  border-bottom: 1px solid rgba(87, 214, 255, 0.18);
-  background: rgba(87, 214, 255, 0.07);
+  border-bottom: 1px solid var(--line);
+  background: #202428;
   color: var(--muted);
   font-size: 11px;
 }
 
 .web-banner span {
   padding: 2px 7px;
-  border: 1px solid rgba(87, 214, 255, 0.35);
+  border: 1px solid var(--line-bright);
   border-radius: 999px;
   color: var(--cyan);
   font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
+  font-weight: 600;
 }
 
 .web-banner p {
@@ -101,7 +98,7 @@ button {
   gap: 24px;
   padding: 0 28px;
   border-bottom: 1px solid var(--line);
-  background: rgba(7, 11, 18, 0.82);
+  background: #191c20;
 }
 
 .brand {
@@ -110,8 +107,8 @@ button {
   gap: 11px;
   color: var(--text);
   font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.13em;
+  font-weight: 650;
+  letter-spacing: 0.02em;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -120,16 +117,14 @@ button {
   position: relative;
   width: 22px;
   height: 22px;
-  border: 1px solid var(--cyan);
-  border-radius: 7px;
-  transform: rotate(45deg);
-  box-shadow: 0 0 18px rgba(87, 214, 255, 0.28);
+  border: 1px solid var(--line-bright);
+  border-radius: 5px;
 }
 
 .brand__mark::after {
   position: absolute;
   inset: 6px;
-  border-radius: 2px;
+  border-radius: 1px;
   background: var(--cyan);
   content: "";
 }
@@ -166,7 +161,6 @@ button {
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--amber);
-  box-shadow: 0 0 12px currentColor;
 }
 
 .status-dot.connected,
@@ -218,9 +212,9 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(330px, 370px);
   flex: 1;
-  gap: 16px;
+  gap: 14px;
   min-height: 0;
-  padding: 16px;
+  padding: 14px;
 }
 
 .story-panel,
@@ -233,12 +227,10 @@ button {
 }
 
 .story-panel {
-  padding: clamp(24px, 3vw, 42px);
+  padding: clamp(26px, 3vw, 38px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background:
-    linear-gradient(135deg, rgba(87, 214, 255, 0.04), transparent 30%),
-    var(--surface);
+  background: var(--surface);
 }
 
 .story-header {
@@ -250,17 +242,16 @@ button {
   margin: 0 0 10px;
   color: var(--cyan);
   font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .story-header h1 {
   margin: 0;
-  font-size: clamp(30px, 3.3vw, 52px);
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  line-height: 1.24;
+  font-size: clamp(29px, 2.8vw, 43px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
 }
 
 .story-lead {
@@ -285,13 +276,12 @@ button {
   justify-content: space-between;
   gap: 18px;
   padding: 14px 18px;
-  border: 1px solid rgba(87, 214, 255, 0.62);
-  border-radius: 13px;
+  border: 1px solid #89aaa6;
+  border-radius: 8px;
   background: var(--cyan);
-  box-shadow: 0 10px 34px rgba(87, 214, 255, 0.17);
-  color: #041018;
+  color: #151b1a;
   text-align: left;
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  transition: background 160ms ease;
 }
 
 .simulate-button::after {
@@ -300,12 +290,11 @@ button {
 }
 
 .simulate-button:hover {
-  box-shadow: 0 14px 44px rgba(87, 214, 255, 0.26);
-  transform: translateY(-2px);
+  background: #86a7a3;
 }
 
 .simulate-button:active {
-  transform: translateY(0);
+  background: #6f928e;
 }
 
 .simulate-button:disabled {
@@ -321,7 +310,7 @@ button {
 }
 
 .simulate-button span {
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .simulate-button small {
@@ -348,7 +337,7 @@ button {
   position: relative;
   width: 42px;
   height: 42px;
-  border: 1px solid rgba(87, 214, 255, 0.55);
+  border: 1px solid var(--line-bright);
   border-radius: 50%;
 }
 
@@ -362,13 +351,11 @@ button {
 .physical-prompt__pulse::before {
   inset: 12px;
   background: var(--cyan);
-  box-shadow: 0 0 18px var(--cyan);
 }
 
 .physical-prompt__pulse::after {
-  inset: -1px;
-  border: 1px solid var(--cyan);
-  animation: prompt-pulse 1.8s ease-out infinite;
+  inset: 5px;
+  border: 1px solid rgba(120, 157, 153, 0.45);
 }
 
 @keyframes prompt-pulse {
@@ -390,15 +377,15 @@ button {
   padding: 18px;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 15px;
+  border-radius: 9px;
   background: var(--surface-soft);
-  transition: border-color 280ms ease, background 280ms ease, transform 280ms ease;
+  transition: border-color 200ms ease, background 200ms ease;
 }
 
 .journey-step::before {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 100%, rgba(87, 214, 255, 0.12), transparent 55%);
+  background: rgba(120, 157, 153, 0.025);
   content: "";
   opacity: 0;
   transition: opacity 280ms ease;
@@ -429,14 +416,14 @@ button {
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
 }
 
 .journey-step__verb {
   position: relative;
   margin: 0 0 10px;
   font-size: 15px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .current-action,
@@ -465,7 +452,7 @@ button {
   right: 8px;
   left: 8px;
   height: 1px;
-  background: repeating-linear-gradient(90deg, var(--line-bright) 0 4px, transparent 4px 8px);
+  background: var(--line-bright);
 }
 
 .journey-link__line::after {
@@ -537,8 +524,8 @@ button {
 }
 
 .xdp-radar::before { inset: 15px; border: 1px solid rgba(128, 237, 153, 0.35); }
-.xdp-radar::after { inset: 34px; background: var(--lime); box-shadow: 0 0 18px var(--lime); }
-.xdp-radar i { inset: 0; border-top: 1px solid var(--lime); animation: radar 2s linear infinite; }
+.xdp-radar::after { inset: 34px; background: var(--lime); }
+.xdp-radar i { inset: 0; border-top: 1px solid rgba(130, 151, 125, 0.55); }
 
 @keyframes radar { to { transform: rotate(360deg); } }
 
@@ -550,15 +537,14 @@ button {
 .main-canvas[data-layer="l2"] .journey-step--capture,
 .main-canvas[data-layer="low"] .journey-step--capture,
 .main-canvas[data-layer="linked"] .journey-step {
-  border-color: rgba(87, 214, 255, 0.65);
-  background: rgba(87, 214, 255, 0.065);
-  transform: translateY(-3px);
+  border-color: #617e7b;
+  background: rgba(120, 157, 153, 0.065);
 }
 
 .main-canvas[data-layer="l2"] .journey-step--capture,
 .main-canvas[data-layer="low"] .journey-step--capture,
 .main-canvas[data-layer="linked"] .journey-step--capture {
-  border-color: rgba(128, 237, 153, 0.7);
+  border-color: #667b62;
   background: var(--lime-soft);
 }
 
@@ -582,7 +568,6 @@ button {
   border-color: var(--cyan);
   color: var(--cyan);
   opacity: 1;
-  animation: packet-travel 900ms ease-in-out infinite alternate;
 }
 
 @keyframes packet-travel {
@@ -634,11 +619,8 @@ button {
   height: 120px;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 13px;
-  background:
-    linear-gradient(90deg, transparent 49.8%, rgba(87, 214, 255, 0.08) 50%, transparent 50.2%),
-    repeating-linear-gradient(0deg, transparent 0 28px, rgba(255, 255, 255, 0.025) 28px 29px),
-    #080d15;
+  border-radius: 8px;
+  background: #16191d;
 }
 
 .waterfall-idle {
@@ -664,8 +646,7 @@ button {
   overflow: hidden;
   border: 1px solid currentColor;
   border-radius: 7px;
-  background: rgba(8, 13, 21, 0.94);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  background: rgba(25, 28, 32, 0.96);
   animation: packet-fall linear forwards;
   pointer-events: none;
 }
@@ -674,8 +655,8 @@ button {
 .packet-drop--udp { color: var(--udp); }
 .packet-drop--icmp { color: var(--icmp); }
 .packet-drop--other { color: var(--muted); }
-.packet-drop--hit { border-width: 2px; color: var(--lime) !important; box-shadow: 0 0 22px rgba(128, 237, 153, 0.34); }
-.packet-drop__proto { font-size: 9px; font-weight: 900; }
+.packet-drop--hit { border-width: 2px; color: var(--lime) !important; }
+.packet-drop__proto { font-size: 9px; font-weight: 700; }
 .packet-drop__route { overflow-wrap: anywhere; font-family: var(--mono); font-size: 8px; }
 .packet-drop__role { font-size: 8px; opacity: 0.75; }
 

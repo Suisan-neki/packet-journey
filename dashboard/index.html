@@ -3,26 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PACKET JOURNEY — 見えない通信をつかまえよう</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap"
-      rel="stylesheet"
-    />
+    <title>Packet Journey — 見えない通信をつかまえよう</title>
     <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.js" defer></script>
   </head>
   <body>
     <div id="web-banner" class="web-banner" hidden>
-      <span>WEB DEMO</span>
+      <span>Webデモ</span>
       <p>実物のボタンの代わりに、画面のボタンで通信を起こせます。</p>
     </div>
 
     <nav class="top-nav">
       <a class="brand" href="#main-canvas" aria-label="Packet Journey トップ">
         <span class="brand__mark" aria-hidden="true"></span>
-        <span>PACKET JOURNEY</span>
+        <span>Packet Journey</span>
       </a>
 
       <div class="top-nav__live">
@@ -32,7 +26,7 @@
         </div>
         <div class="nav-rate" aria-label="現在のパケット数">
           <strong id="pps-value">0</strong>
-          <span>packets / sec</span>
+          <span>パケット/秒</span>
         </div>
         <button id="demo-toggle" class="demo-toggle" type="button" aria-pressed="false">
           デモ通信
@@ -128,7 +122,7 @@
 
       <aside class="discovery-panel" aria-label="通信の詳しい情報">
         <section class="discovery-card discovery-card--result">
-          <p class="section-kicker">DISCOVERY</p>
+          <p class="section-kicker">見つけた通信</p>
           <h2>つかまえた通信の正体</h2>
           <p class="discovery-intro">難しい言葉はあとで大丈夫。まずは「本当に流れている」ことを見てみよう。</p>
 
@@ -164,13 +158,13 @@
 
         <details class="deep-dive">
           <summary>
-            <span><small>FOR THE CURIOUS</small>もっと深く見てみる</span>
+            <span><small>詳しい情報</small>もう少し深く見てみる</span>
             <span class="deep-dive__plus" aria-hidden="true">＋</span>
           </summary>
 
           <div class="deep-dive__body">
             <section class="metric-strip" aria-label="通信量">
-              <div><small>1秒間</small><strong><span id="pps-detail-value">0</span><em> packets</em></strong></div>
+              <div><small>1秒間</small><strong><span id="pps-detail-value">0</span><em> パケット</em></strong></div>
               <div><small>見つけた総数</small><strong id="total-value">0</strong></div>
             </section>
 

@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
-/** GitHub Pages: https://<user>.github.io/xdp-hello/ */
-const base = process.env.GITHUB_PAGES === "true" ? "/xdp-hello/" : "/";
+/** GitHub Pages: https://<user>.github.io/packet-journey/ */
+const base = process.env.GITHUB_PAGES === "true" ? "/packet-journey/" : "/";
 const buildId = process.env.GITHUB_SHA?.slice(0, 7) ?? "local";
 
 export default defineConfig({

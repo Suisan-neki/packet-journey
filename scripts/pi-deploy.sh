@@ -26,7 +26,7 @@ echo "==> cross build action-node (gpio)"
 cross build --release --manifest-path "$REPO_ROOT/tools/Cargo.toml" -p action-node --features gpio --target "$PI_TARGET"
 
 BIN="$REPO_ROOT/tools/target/$PI_TARGET/release/action-node"
-REMOTE_DIR="~/xdp-hello-bin"
+REMOTE_DIR="~/packet-journey-bin"
 
 echo "==> deploy to $PI_HOST"
 ssh "$PI_HOST" "mkdir -p $REMOTE_DIR"
