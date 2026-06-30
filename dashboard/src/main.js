@@ -8,13 +8,42 @@ const STATUS_LABELS = {
 };
 
 const LAYER_NARRATION = {
-  idle: "ボタンを押すと、高レイヤの操作から低レイヤの観測へ視点が移ります",
-  high: "高レイヤ：ボタンやアプリの世界です（「何をしたか」が見える）",
-  descend: "いま、上の操作に対応する通信を下の世界で探しています…",
-  mid: "中レイヤ：操作はパケットという形に変わってネットワークを流れます",
-  low: "低レイヤ：カーネルがパケットを1つずつ観測しています",
-  linked: "つながった！高レイヤの操作と、低レイヤのパケットは同じ出来事です",
-  ascend: "低レイヤで見えたことを、いま画面に戻して表示しています",
+  idle: "ボタンを押すと、OSIの L7 から L2 へ視点が下がり、同じ通信を別の層で見ます",
+  l7: "L7 アプリケーション層 — ボタンやアプリの操作が見えます",
+  high: "L7 アプリケーション層 — ボタンやアプリの操作が見えます",
+  descend: "L7 → L4 → L3 → L2 … OSIの上から下へ視点を下げています",
+  l4l3: "L4 トランスポート層 + L3 ネットワーク層 — TCP/UDP と IP でパケットが流れます",
+  mid: "L4 トランスポート層 + L3 ネットワーク層 — TCP/UDP と IP でパケットが流れます",
+  l2: "L2 データリンク層 — XDP がカーネル内でパケットを観測しています",
+  low: "L2 データリンク層 — XDP がカーネル内でパケットを観測しています",
+  linked: "つながった！L7 の操作と、L4·L3·L2 のパケットは同じ出来事です",
+  ascend: "低い層で見えたことを、L7 の画面に戻して表示しています",
+};
+
+const OSI_FOCUS = {
+  idle: "いまの視点: L7（操作）",
+  l7: "いまの視点: L7 アプリケーション層",
+  high: "いまの視点: L7 アプリケーション層",
+  descend: "いまの視点: L7 → L4 → L3 → L2 へ移動中",
+  l4l3: "いまの視点: L4 + L3",
+  mid: "いまの視点: L4 + L3",
+  l2: "いまの視点: L2 データリンク層",
+  low: "いまの視点: L2 データリンク層",
+  linked: "いまの視点: L7 と L4·L3·L2 が対応",
+  ascend: "いまの視点: L7 に戻る",
+};
+
+const LAYER_TO_OSI = {
+  idle: { active: [7], pulse: null },
+  l7: { active: [7], pulse: 7 },
+  high: { active: [7], pulse: 7 },
+  descend: { active: [7, 4, 3], pulse: 4 },
+  l4l3: { active: [4, 3], pulse: 4 },
+  mid: { active: [4, 3], pulse: 4 },
+  l2: { active: [2, 3, 4], pulse: 2 },
+  low: { active: [2, 3, 4], pulse: 2 },
+  linked: { active: [7, 4, 3, 2], pulse: null },
+  ascend: { active: [7, 4, 3, 2], pulse: 7 },
 };
 const DEMO_PI_IP = "192.168.1.50";
 const MAX_PACKETS = 12;
@@ -22,21 +51,25 @@ const MAX_PACKETS = 12;
 const PROTOCOL_META = {
   TCP: {
     name: "TCP",
+    osi: 4,
     hint: "データを正確かつ確実に届ける",
     explain: "Web やメールなど、取りこぼしが困る通信に使われます",
   },
   UDP: {
     name: "UDP",
+    osi: 4,
     hint: "届いたかは問わず、とにかく速く送る",
     explain: "動画配信や名前解決など、速度優先の通信に使われます",
   },
   ICMP: {
     name: "ICMP",
+    osi: 3,
     hint: "相手につながるか調べる",
     explain: "ping など、疎通確認に使われます",
   },
   OTHER: {
     name: "その他",
+    osi: 4,
     hint: "その他の形式",
     explain: "上記以外の通信ルールです",
   },
@@ -56,7 +89,7 @@ const state = {
   highlightSrc: null,
   lastActionLabel: null,
   hasAction: false,
-  currentLayer: "high",
+  currentLayer: "l7",
 };
 
 const els = {};
@@ -93,6 +126,8 @@ function cacheElements() {
   els.mainCanvas = document.querySelector("#main-canvas");
   els.panelLeft = document.querySelector(".panel--left");
   els.panelRight = document.querySelector(".panel--right");
+  els.osiLayers = document.querySelectorAll(".osi-layer");
+  els.osiFocus = document.querySelector("#osi-focus");
 }
 
 function protocolMeta(protocol) {
@@ -169,10 +204,32 @@ function formatTime(date = new Date()) {
 
 function setActiveFlowStep(step) {
   const visualStep =
-    step === "descend" ? "mid" : step === "ascend" ? "linked" : step === "idle" ? "high" : step;
+    step === "descend"
+      ? "l4l3"
+      : step === "ascend"
+        ? "linked"
+        : step === "idle" || step === "high"
+          ? "l7"
+          : step === "mid"
+            ? "l4l3"
+            : step === "low"
+              ? "l2"
+              : step;
   els.flowSteps.forEach((el) => {
     el.classList.toggle("flow-map__step--active", el.dataset.step === visualStep);
   });
+}
+
+function setOsiHighlight(layerKey) {
+  const config = LAYER_TO_OSI[layerKey] ?? LAYER_TO_OSI.idle;
+  els.osiLayers?.forEach((el) => {
+    const n = Number(el.dataset.osi);
+    el.classList.toggle("osi-layer--active", config.active.includes(n));
+    el.classList.toggle("osi-layer--pulse", config.pulse === n);
+  });
+  if (els.osiFocus && OSI_FOCUS[layerKey]) {
+    els.osiFocus.textContent = OSI_FOCUS[layerKey];
+  }
 }
 
 function setLayerNarration(key) {
@@ -185,16 +242,20 @@ function setActiveLayer(layer) {
   state.currentLayer = layer;
   setActiveFlowStep(layer);
   setLayerNarration(layer);
+  setOsiHighlight(layer);
 
-  els.panelLeft?.classList.toggle("panel--layer-active", layer === "low" || layer === "linked");
-  els.panelRight?.classList.toggle("panel--layer-active", layer === "high" || layer === "linked");
+  const isLow = layer === "l2" || layer === "linked" || layer === "low";
+  const isHigh = layer === "l7" || layer === "linked" || layer === "high";
+  els.panelLeft?.classList.toggle("panel--layer-active", isLow);
+  els.panelRight?.classList.toggle("panel--layer-active", isHigh);
   els.mainCanvas?.classList.toggle("main-canvas--linked", layer === "linked");
 }
 
 function showLayerBridge(label, protocol, route) {
   const meta = protocolMeta(protocol);
-  els.bridgeHighText.textContent = `「${label}」ボタンを押した`;
-  els.bridgeLowText.textContent = `${meta.name} パケット ${route}`;
+  const osiLabel = meta.osi === 3 ? "L3" : "L4";
+  els.bridgeHighText.textContent = `L7:「${label}」ボタンを押した`;
+  els.bridgeLowText.textContent = `${osiLabel} ${meta.name} + L3 IP — ${route}（L2で観測）`;
   els.layerBridgeCard.hidden = false;
   els.layerSpan.hidden = false;
 }
@@ -224,7 +285,8 @@ function correlatedSummary(label, protocol, src, srcPort, dst, dstPort) {
   const meta = protocolMeta(protocol);
   const route = `${formatEndpoint(src, srcPort)} → ${formatEndpoint(dst, dstPort)}`;
   const purpose = dstPort ? portHint(dstPort) : meta.hint;
-  return `高レイヤの「${label}」は、低レイヤでは ${meta.name} パケット（${route}）として観測されました。${purpose} への通信です。表と裏で、同じ出来事が見えています。`;
+  const osiProto = `L${meta.osi} ${meta.name}`;
+  return `L7 の「${label}」は、OSI の下位層では ${osiProto} パケット（L3: ${route}）として観測されました。${purpose} への通信です。同じ出来事を、層の違う見方で捉えています。`;
 }
 
 function setCurrentAction(text, active = true) {
@@ -241,19 +303,19 @@ function setBehindData(event) {
   const protocol = event.protocol ?? "OTHER";
   const meta = protocolMeta(protocol);
 
-  els.behindProtocol.textContent = `${meta.name} — ${meta.hint}`;
+  els.behindProtocol.textContent = `L${meta.osi} ${meta.name} — ${meta.hint}`;
   els.behindProtocol.className = `proto-badge ${protoBadgeClass(protocol)}`;
   els.behindSrc.textContent = event.src ?? "—";
   els.behindDst.textContent = event.dst ?? "—";
 
   if (event.src_port) {
-    els.behindSrcPort.textContent = `ポート ${event.src_port}`;
+    els.behindSrcPort.textContent = `L4 ポート ${event.src_port}`;
   } else {
     els.behindSrcPort.textContent = "";
   }
 
   if (event.dst_port) {
-    els.behindDstPort.textContent = portHint(event.dst_port);
+    els.behindDstPort.textContent = `L4 ${portHint(event.dst_port)}`;
   } else {
     els.behindDstPort.textContent = "";
   }
@@ -314,11 +376,11 @@ function dropPacket(event, { highlight = false } = {}) {
 
   const proto = document.createElement("span");
   proto.className = "packet-drop__proto";
-  proto.textContent = `${meta.name} — ${meta.hint}`;
+  proto.textContent = `L${meta.osi} ${meta.name} — ${meta.hint}`;
 
   const route = document.createElement("span");
   route.className = "packet-drop__route";
-  route.textContent = `${formatEndpoint(event.src, event.src_port)} → ${formatEndpoint(
+  route.textContent = `L3 ${formatEndpoint(event.src, event.src_port)} → ${formatEndpoint(
     event.dst,
     event.dst_port,
   )}`;
@@ -359,13 +421,13 @@ function handleEvent(event) {
     state.hasAction = true;
     setCurrentAction(`【${state.lastActionLabel}】ボタンが押されました`);
     hideLayerBridge();
-    setActiveLayer("high");
+    setActiveLayer("l7");
     window.clearTimeout(state.flowStepTimer);
     state.flowStepTimer = window.setTimeout(() => {
       setActiveLayer("descend");
-      window.setTimeout(() => setActiveLayer("low"), 500);
+      window.setTimeout(() => setActiveLayer("l2"), 550);
     }, 350);
-    showCaptureToast("高レイヤで操作を検知。低レイヤのパケットを探しています…");
+    showCaptureToast("L7 で操作を検知。L4·L3·L2 のパケットを探しています…");
     return;
   }
 
@@ -383,13 +445,13 @@ function handleEvent(event) {
     state.highlightUntil = performance.now() + 5000;
     window.clearTimeout(state.flowStepTimer);
     setActiveLayer("linked");
-    showCaptureToast("つながった！高レイヤの操作と、低レイヤのパケットは同じ出来事です");
+    showCaptureToast("つながった！L7 の操作と L4·L3·L2 のパケットは同じ出来事です");
     pushFlowRow(event, true);
     dropPacket(event, { highlight: true });
     state.flowStepTimer = window.setTimeout(() => {
       setActiveLayer("ascend");
       window.setTimeout(() => {
-        setActiveLayer("high");
+        setActiveLayer("l7");
         hideLayerBridge();
         state.hasAction = false;
       }, 1200);
@@ -402,8 +464,8 @@ function handleEvent(event) {
     dropPacket(event);
     pushFlowRow(event, false);
     updateStats();
-    if (!state.hasAction && state.currentLayer === "high") {
-      setActiveLayer("mid");
+    if (!state.hasAction && (state.currentLayer === "l7" || state.currentLayer === "high")) {
+      setActiveLayer("l4l3");
     }
   }
 }
@@ -588,7 +650,7 @@ window.addEventListener("DOMContentLoaded", () => {
   renderFlowList();
   setCurrentAction("ボタンを押すとここに表示されます", false);
   setStatus("waiting");
-  setActiveLayer("high");
+  setActiveLayer("l7");
   hideLayerBridge();
   els.demoToggle.addEventListener("click", toggleDemo);
   connectStream();
