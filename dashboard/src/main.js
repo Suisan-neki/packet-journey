@@ -4,26 +4,26 @@ const BUILD_ID = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "local";
 
 const STATUS_LABELS = {
   waiting: "待機中",
-  connected: "システム稼働中（通信を観測しています）",
+  connected: "通信の流れを観測中",
   disconnected: "接続が切断されました",
-  demo: "デモ（サンプルデータ）",
+  demo: "デモの通信を再生中",
 };
 
 const LAYER_NARRATION = {
-  idle: "ボタンを押すと、OSIの L7 から L2 へ視点が下がり、同じ通信を別の層で見ます",
-  l7: "L7 アプリケーション層 — ボタンやアプリの操作が見えます",
-  high: "L7 アプリケーション層 — ボタンやアプリの操作が見えます",
-  descend: "L7 → L4 → L3 → L2 … OSIの上から下へ視点を下げています",
-  l4l3: "L4 トランスポート層 + L3 ネットワーク層 — TCP/UDP と IP でパケットが流れます",
-  mid: "L4 トランスポート層 + L3 ネットワーク層 — TCP/UDP と IP でパケットが流れます",
-  l2: "L2 データリンク層 — XDP がカーネル内でパケットを観測しています",
-  low: "L2 データリンク層 — XDP がカーネル内でパケットを観測しています",
-  linked: "つながった！L7 の操作と、L4·L3·L2 のパケットは同じ出来事です",
-  ascend: "低い層で見えたことを、L7 の画面に戻して表示しています",
+  idle: "ボタンを押すと、小さなパケットの旅を L7 から L2 まで追いかけます",
+  l7: "L7 アプリケーション層 — 操作から通信が生まれる場所です",
+  high: "L7 アプリケーション層 — 操作から通信が生まれる場所です",
+  descend: "パケットは L7 から L4·L3 へ。届け方と宛先を持って、下の層へ進みます",
+  l4l3: "L4·L3 — TCP/UDP と IP が、パケットの届け方と行き先を決めます",
+  mid: "L4·L3 — TCP/UDP と IP が、パケットの届け方と行き先を決めます",
+  l2: "L2 データリンク層 — カーネルの入口で、XDP が通り過ぎるパケットを見張っています",
+  low: "L2 データリンク層 — カーネルの入口で、XDP が通り過ぎるパケットを見張っています",
+  linked: "つながった。画面の操作は、下の層ではこのパケットとして流れていました",
+  ascend: "カーネルの入口で見つけたパケットを、画面の操作へ結び直しています",
 };
 
 const OSI_FOCUS = {
-  idle: "いまの視点: L7（操作）",
+  idle: "いまの視点: L7（旅のはじまり）",
   l7: "いまの視点: L7 アプリケーション層",
   high: "いまの視点: L7 アプリケーション層",
   descend: "いまの視点: L7 → L4 → L3 → L2 へ移動中",
@@ -31,7 +31,7 @@ const OSI_FOCUS = {
   mid: "いまの視点: L4 + L3",
   l2: "いまの視点: L2 データリンク層",
   low: "いまの視点: L2 データリンク層",
-  linked: "いまの視点: L7 と L4·L3·L2 が対応",
+  linked: "いまの視点: 操作とパケットがつながった状態",
   ascend: "いまの視点: L7 に戻る",
 };
 
@@ -54,25 +54,25 @@ const PROTOCOL_META = {
   TCP: {
     name: "TCP",
     osi: 4,
-    hint: "データを正確かつ確実に届ける",
+    hint: "確実に届ける",
     explain: "Web やメールなど、取りこぼしが困る通信に使われます",
   },
   UDP: {
     name: "UDP",
     osi: 4,
-    hint: "届いたかは問わず、とにかく速く送る",
+    hint: "速く届ける",
     explain: "動画配信や名前解決など、速度優先の通信に使われます",
   },
   ICMP: {
     name: "ICMP",
     osi: 3,
-    hint: "相手につながるか調べる",
+    hint: "つながるか調べる",
     explain: "ping など、疎通確認に使われます",
   },
   OTHER: {
     name: "その他",
     osi: 4,
-    hint: "その他の形式",
+    hint: "別の通信",
     explain: "上記以外の通信ルールです",
   },
 };
@@ -280,7 +280,7 @@ function correlatedSummary(label, protocol, src, srcPort, dst, dstPort) {
   const route = `${formatEndpoint(src, srcPort)} → ${formatEndpoint(dst, dstPort)}`;
   const purpose = dstPort ? portHint(dstPort) : meta.hint;
   const osiProto = `L${meta.osi} ${meta.name}`;
-  return `L7 の「${label}」は、OSI の下位層では ${osiProto} パケット（L3: ${route}）として観測されました。${purpose} への通信です。同じ出来事を、層の違う見方で捉えています。`;
+  return `「${label}」から生まれた通信は、下の層では ${osiProto} パケットとして流れていました。L3 の旅路は ${route}。${purpose} へ向かった、小さなデータの荷物です。`;
 }
 
 function setCurrentAction(text, active = true) {
@@ -422,8 +422,8 @@ function handleEvent(event) {
   if (event.type === "physical_action") {
     state.lastActionLabel = event.label ?? "操作";
     state.hasAction = true;
-    setCurrentAction(`【${state.lastActionLabel}】ボタンが押されました`);
-    setCaptureStage("XDPが捜索中…", "操作から生まれたパケットを、カーネルの入口で探しています");
+    setCurrentAction(`【${state.lastActionLabel}】から旅が始まりました`);
+    setCaptureStage("パケットを追跡中…", "ボタン操作から生まれた通信が、下の層へ進んでいます");
     hideLayerBridge();
     setActiveLayer("l7");
     window.clearTimeout(state.flowStepTimer);
@@ -431,7 +431,7 @@ function handleEvent(event) {
       setActiveLayer("descend");
       window.setTimeout(() => setActiveLayer("l2"), 550);
     }, 350);
-    showCaptureToast("L7 で操作を検知。L4·L3·L2 のパケットを探しています…");
+    showCaptureToast("ボタン操作を検知しました。小さなパケットの旅が始まります。");
     return;
   }
 
@@ -442,13 +442,13 @@ function handleEvent(event) {
       event.dst,
       event.dst_port,
     )}`;
-    setCurrentAction(`【${label}】ボタンが押されました`);
+    setCurrentAction(`【${label}】から生まれた通信を追跡中`);
     setBehindData({ ...event, label });
-    setCaptureStage("見つけた！", `${protocol}パケットをXDPがカーネルの入口で捕まえました`);
+    setCaptureStage("パケットをつかまえました", `${protocol}パケットを、XDPがカーネルの入口で観測しました`);
     showLayerBridge(label, protocol, route);
     window.clearTimeout(state.flowStepTimer);
     setActiveLayer("linked");
-    showCaptureToast("つながった！L7 の操作と L4·L3·L2 のパケットは同じ出来事です");
+    showCaptureToast("操作とパケットがつながりました。画面の操作は、確かに通信になっていました。");
     pushFlowRow(event, true);
     dropPacket(event, { highlight: true });
     state.flowStepTimer = window.setTimeout(() => {
@@ -488,7 +488,7 @@ function renderFlowList() {
   if (state.flowRows.length === 0) {
     const empty = document.createElement("p");
     empty.className = "flow-list-empty";
-    empty.textContent = "捕捉したパケットがここに並びます";
+    empty.textContent = "旅の記録がここに並びます";
     els.flowList.appendChild(empty);
     return;
   }
@@ -654,7 +654,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   updateStats();
   renderFlowList();
-  setCurrentAction("ボタンを押すとここに表示されます", false);
+  setCurrentAction("まだパケットは生まれていません", false);
   setStatus("waiting");
   setActiveLayer("l7");
   hideLayerBridge();
