@@ -13,18 +13,18 @@ const MAX_PACKETS = 12;
 const PROTOCOL_META = {
   TCP: {
     name: "TCP",
-    hint: "届いたか確認しながら送る",
-    explain: "Web ページの取得など、確実なやり取りに使われます",
+    hint: "データを正確かつ確実に届ける",
+    explain: "Web やメールなど、取りこぼしが困る通信に使われます",
   },
   UDP: {
     name: "UDP",
-    hint: "確認なしで送る",
+    hint: "届いたかは問わず、とにかく速く送る",
     explain: "動画配信や名前解決など、速度優先の通信に使われます",
   },
   ICMP: {
     name: "ICMP",
-    hint: "応答があるか調べる",
-    explain: "「そこにいますか？」という疎通確認に使われます",
+    hint: "相手につながるか調べる",
+    explain: "ping など、疎通確認に使われます",
   },
   OTHER: {
     name: "その他",
