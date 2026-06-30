@@ -67,9 +67,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .await?;
 
-        println!(
-            "mock-sensor: temp={temp_c:.1}C humidity={humidity:.0}% (step={step})"
-        );
+        println!("mock-sensor: temp={temp_c:.1}C humidity={humidity:.0}% (step={step})");
 
         if matches!(opt.scenario, Scenario::Overheat) && step >= 20 {
             println!("mock-sensor: overheat scenario complete");

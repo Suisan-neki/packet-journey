@@ -4,147 +4,105 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>観測コア ダッシュボード</title>
+    <title>XDP Packet Observatory</title>
     <script type="module" src="/src/main.js" defer></script>
   </head>
-
   <body>
     <main class="dashboard">
-      <section class="topbar">
-        <div>
-          <p class="eyebrow">低レイヤ観測コア / 技術デモ</p>
-          <h1>観測コア ダッシュボード</h1>
+      <div id="web-banner" class="web-banner" hidden>
+        <p>
+          GitHub Pages デモ版です。下のボタンで<strong>ラズパイの物理操作</strong>を再現し、
+          eBPF が捉えるパケットをシミュレートします。本番展示では実機のボタンとカーネル観測を接続します。
+        </p>
+      </div>
+
+      <header class="hero">
+        <div class="hero__copy">
+          <p class="eyebrow">eBPF / XDP パケット観測</p>
+          <h1>Packet Observatory</h1>
           <p class="subtitle">
-            低レイヤ観測からの初動判断を可視化します（Web 版は組み込みデモデータで動作）
+            ボタン操作 → 実通信 → カーネルがパケットを捕捉、という流れを可視化します。
           </p>
         </div>
         <div class="status-strip">
           <span id="stream-dot" class="status-dot waiting"></span>
           <span id="stream-status">待機中</span>
-          <button id="demo-toggle" class="icon-button" type="button" aria-pressed="false" title="実データなしで画面だけ動かす">
+          <button id="demo-toggle" class="icon-button" type="button" aria-pressed="false" title="デモデータ">
             デモ
           </button>
         </div>
-      </section>
+      </header>
 
-      <nav class="view-tabs" aria-label="画面切替">
-        <button class="view-tab active" type="button" data-view="tech">技術デモ</button>
-        <button class="view-tab" type="button" data-view="clinical">初動判断</button>
-        <button class="view-tab" type="button" data-view="degraded">縮退ビュー</button>
-      </nav>
-
-      <section id="view-tech" class="view-panel">
-        <section class="metrics-grid">
-          <article class="meter-panel">
-            <div class="panel-heading">
-              <span>秒間パケット数（PPS）</span>
-              <strong id="pps-value">0</strong>
-            </div>
-            <canvas id="pps-meter" aria-label="PPS メーター"></canvas>
-          </article>
-
-          <article class="stats-panel">
-            <div class="stat">
-              <span>累計パケット数</span>
-              <strong id="total-value">0</strong>
-            </div>
-            <div class="stat">
-              <span>直近のプロトコル</span>
-              <strong id="protocol-value">—</strong>
-            </div>
-            <div class="stat">
-              <span>レート超過アラート</span>
-              <strong id="alert-count">0</strong>
-            </div>
-          </article>
-        </section>
-
-        <section class="visual-grid">
-          <article class="waterfall-panel">
-            <div class="panel-heading">
-              <span>パケットの滝（直近のフロー）</span>
-              <strong id="flow-count">0 件</strong>
-            </div>
-            <canvas id="waterfall" aria-label="フロー時系列"></canvas>
-          </article>
-
-          <article class="side-panel">
-            <div class="panel-heading">
-              <span>CPU 負荷の比較（参考）</span>
-            </div>
-            <p class="panel-note">※ 固定の見本値です。実測ではありません。</p>
-            <div class="cpu-row">
-              <span>従来型スタック</span>
-              <div class="bar"><i class="legacy"></i></div>
-              <strong>78%</strong>
-            </div>
-            <div class="cpu-row">
-              <span>eBPF / XDP</span>
-              <div class="bar"><i class="xdp"></i></div>
-              <strong>7%</strong>
-            </div>
-            <div class="panel-heading panel-heading--sub">
-              <span>直近のアラート</span>
-            </div>
-            <div class="alert-log" id="alert-log"></div>
-          </article>
-        </section>
-      </section>
-
-      <section id="view-clinical" class="view-panel" hidden>
-        <article class="clinical-hero">
-          <div class="clinical-hero__copy">
-            <p class="eyebrow">画面B / 医療従事者向け</p>
-            <h2 id="clinical-headline">現在、異常は検知されていません</h2>
-            <p id="clinical-summary" class="clinical-summary">
-              低レイヤ観測からの事実のみに基づき、初動の判断材料を提示します。AI は意思決定の主体ではありません。
-            </p>
-          </div>
-          <div id="clinical-badge" class="clinical-badge clinical-badge--calm">平時</div>
-        </article>
-
-        <section class="clinical-grid">
-          <article class="clinical-card">
-            <div class="panel-heading">
-              <span>いますぐ動けること</span>
-            </div>
-            <ol id="clinical-actions" class="action-list">
-              <li class="action-item action-item--calm">異常検知時に、ここへ可逆的な初動手順が表示されます。</li>
-            </ol>
-          </article>
-
-          <article class="clinical-card">
-            <div class="panel-heading">
-              <span>影響範囲</span>
-            </div>
-            <p id="clinical-unaffected" class="clinical-note">影響範囲のメモがここに表示されます。</p>
-            <div class="panel-heading panel-heading--sub">
-              <span>根拠データ（遡及可能）</span>
-            </div>
-            <ul id="clinical-sources" class="source-list">
-              <li>ソースデータは観測イベントから自動生成されます。</li>
-            </ul>
-          </article>
-        </section>
-      </section>
-
-      <section id="view-degraded" class="view-panel" hidden>
-        <article class="degraded-banner">
-          <div>
-            <p class="eyebrow">ステップ③ / 最小限の診療継続</p>
-            <h2>縮退ビュー（模擬 FHIR）</h2>
-            <p id="degraded-note" class="clinical-summary">
-              通常復旧が間に合わない場合に、救出済みの最小限データを隔離表示します。表示中のデータは模擬です。
-            </p>
-          </div>
-        </article>
-        <div id="patient-grid" class="patient-grid">
-          <article class="patient-card patient-card--empty">
-            <p>複合障害シナリオ検知時に、模擬患者リストがここへ表示されます。</p>
-          </article>
+      <section id="booth-panel" class="booth-panel" hidden>
+        <div class="booth-panel__diagram" aria-hidden="true">
+          <span class="booth-step">ラズパイ<br />ボタン</span>
+          <span class="booth-arrow">→</span>
+          <span class="booth-step">HTTP<br />通信</span>
+          <span class="booth-arrow">→</span>
+          <span class="booth-step booth-step--core">eBPF<br />XDP</span>
+          <span class="booth-arrow">→</span>
+          <span class="booth-step">パケット<br />滝</span>
+        </div>
+        <div class="booth-panel__control">
+          <p class="eyebrow">展示ブース（デモ）</p>
+          <button id="simulate-button" class="booth-button" type="button">
+            状態確認
+          </button>
+          <p class="booth-panel__hint">
+            技育博ではラズパイの実ボタンを押します。ここでは同じ操作をシミュレートします。
+          </p>
         </div>
       </section>
 
+      <section class="metrics-grid">
+        <article class="meter-panel">
+          <div class="panel-heading">
+            <span>Packets Per Second</span>
+            <strong id="pps-value">0</strong>
+          </div>
+          <canvas id="pps-meter" aria-label="PPS メーター"></canvas>
+        </article>
+        <article class="stats-panel">
+          <div class="stat">
+            <span>累計</span>
+            <strong id="total-value">0</strong>
+          </div>
+          <div class="stat">
+            <span>直近プロトコル</span>
+            <strong id="protocol-value">—</strong>
+          </div>
+          <div class="stat">
+            <span>アラート</span>
+            <strong id="alert-count">0</strong>
+          </div>
+        </article>
+      </section>
+
+      <section class="visual-grid">
+        <article class="waterfall-panel">
+          <div class="panel-heading">
+            <span>パケット滝</span>
+            <strong id="flow-count">0 件</strong>
+          </div>
+          <canvas id="waterfall" aria-label="フロー時系列"></canvas>
+        </article>
+
+        <aside class="side-panel">
+          <div class="panel-heading">
+            <span>直近フロー</span>
+          </div>
+          <div id="flow-list" class="flow-list"></div>
+          <div class="panel-heading panel-heading--sub">
+            <span>レートアラート</span>
+          </div>
+          <div id="alert-log" class="alert-log"></div>
+        </aside>
+      </section>
+
+      <div id="action-toast" class="action-toast" hidden>
+        <p class="action-toast__label" id="toast-label">ボタン操作</p>
+        <p class="action-toast__detail" id="toast-detail"></p>
+      </div>
       <div id="attack-flash" class="attack-flash" aria-hidden="true"></div>
     </main>
   </body>

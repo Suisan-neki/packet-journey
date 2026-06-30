@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Mac 単体で observation-hub + mock-sensor + Tauri を起動する開発用スクリプト。
 # Lima / xdp-hello は別ターミナルで動かす（./scripts/lima-sync.sh --run）。
+# 物理ボタン模擬: 別ターミナルで cargo run -p action-node --manifest-path tools/Cargo.toml
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,7 +50,7 @@ trap cleanup EXIT INT TERM
 echo "==> building observation-core + tools"
 cargo build --release --manifest-path "$TOOLS_DIR/Cargo.toml"
 
-echo "==> starting observation-hub (127.0.0.1:9010)"
+echo "==> starting observation-hub (127.0.0.1:9010, http :8080)"
 "$TOOLS_DIR/target/release/observation-hub" &
 HUB_PID=$!
 
@@ -64,8 +65,13 @@ fi
 echo ""
 echo "Mac 検証環境が起動しました。"
 echo "  observation-hub : 127.0.0.1:9010"
-echo "  sensor ingest   : 127.0.0.1:9001"
+echo "  action ingest   : 127.0.0.1:9001"
+echo "  http ping       : http://127.0.0.1:8080/api/ping"
 echo "  ebpf upstream   : 127.0.0.1:9000 (Lima で xdp-hello 起動時に接続)"
+echo ""
+echo "物理ボタン模擬 (別ターミナル):"
+echo "  cargo run --release --manifest-path $TOOLS_DIR/Cargo.toml -p action-node"
+echo "  # Enter で physical_action + HTTP を送信"
 echo ""
 echo "別ターミナルで Lima の eBPF を動かす場合:"
 echo "  cd $REPO_ROOT && ./scripts/lima-sync.sh --run"

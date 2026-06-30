@@ -8,6 +8,8 @@ pub enum StreamEvent {
     Alert(AlertEvent),
     Stats(StatsEvent),
     Sensor(SensorEvent),
+    PhysicalAction(PhysicalActionEvent),
+    ActionCorrelated(ActionCorrelatedEvent),
     Guidance(GuidanceEvent),
     FhirSnapshot(FhirSnapshotEvent),
 }
@@ -33,6 +35,29 @@ pub struct AlertEvent {
 pub struct StatsEvent {
     pub pps: u64,
     pub total: u64,
+}
+
+/// ラズパイ等の物理ボタン操作（action-node から hub へ送る）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PhysicalActionEvent {
+    pub node_id: String,
+    pub action: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub src_ip: Option<String>,
+}
+
+/// 物理操作と eBPF flow の相関結果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ActionCorrelatedEvent {
+    pub node_id: String,
+    pub action: String,
+    pub label: String,
+    pub protocol: String,
+    pub src: String,
+    pub src_port: u16,
+    pub dst: String,
+    pub dst_port: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -120,7 +145,7 @@ pub struct MockPatient {
     pub last_vitals: String,
 }
 
-/// 上流（xdp-hello / mock-sensor）から届く未加工 NDJSON 行を解釈する。
+/// 上流（xdp-hello / mock-sensor / action-node）から届く未加工 NDJSON 行を解釈する。
 pub fn parse_upstream_line(line: &str) -> Option<UpstreamEvent> {
     let value: serde_json::Value = serde_json::from_str(line).ok()?;
     let kind = value.get("type")?.as_str()?;
@@ -160,6 +185,15 @@ pub fn parse_upstream_line(line: &str) -> Option<UpstreamEvent> {
                 unit: value.get("unit")?.as_str()?.to_string(),
             }))
         }
+        "physical_action" => Some(UpstreamEvent::PhysicalAction(PhysicalActionEvent {
+            node_id: value.get("node_id")?.as_str()?.to_string(),
+            action: value.get("action")?.as_str()?.to_string(),
+            label: value.get("label")?.as_str()?.to_string(),
+            src_ip: value
+                .get("src_ip")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+        })),
         _ => None,
     }
 }
@@ -170,6 +204,7 @@ pub enum UpstreamEvent {
     Alert(AlertEvent),
     Stats(StatsEvent),
     Sensor(SensorEvent),
+    PhysicalAction(PhysicalActionEvent),
 }
 
 impl UpstreamEvent {
@@ -179,6 +214,7 @@ impl UpstreamEvent {
             Self::Alert(e) => StreamEvent::Alert(e.clone()),
             Self::Stats(e) => StreamEvent::Stats(e.clone()),
             Self::Sensor(e) => StreamEvent::Sensor(e.clone()),
+            Self::PhysicalAction(e) => StreamEvent::PhysicalAction(e.clone()),
         }
     }
 }
@@ -200,5 +236,14 @@ mod tests {
         )
         .expect("flow");
         assert!(matches!(event, UpstreamEvent::Flow(_)));
+    }
+
+    #[test]
+    fn parses_physical_action_line() {
+        let event = parse_upstream_line(
+            r#"{"type":"physical_action","node_id":"pi-1","action":"check_status","label":"状態確認","src_ip":"192.168.1.50"}"#,
+        )
+        .expect("physical_action");
+        assert!(matches!(event, UpstreamEvent::PhysicalAction(_)));
     }
 }

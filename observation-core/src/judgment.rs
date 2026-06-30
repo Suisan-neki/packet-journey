@@ -47,6 +47,7 @@ impl JudgmentEngine {
             UpstreamEvent::Alert(alert) => self.ingest_alert(alert),
             UpstreamEvent::Sensor(sensor) => self.ingest_sensor(sensor),
             UpstreamEvent::Stats(_) => Vec::new(),
+            UpstreamEvent::PhysicalAction(_) => Vec::new(),
         }
     }
 
@@ -157,7 +158,9 @@ impl JudgmentEngine {
         let guidance = build();
         let mut outputs = vec![JudgmentOutput::Guidance(guidance.clone())];
         if guidance.degraded {
-            outputs.push(JudgmentOutput::FhirSnapshot(snapshot_for_scenario(scenario)));
+            outputs.push(JudgmentOutput::FhirSnapshot(snapshot_for_scenario(
+                scenario,
+            )));
         }
         outputs
     }

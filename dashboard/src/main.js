@@ -1,4 +1,4 @@
-import { subscribeStream } from "./stream.js";
+import { subscribeStream, isWebDemo } from "./stream.js";
 
 const STATUS_LABELS = {
   waiting: "待機中",
@@ -7,37 +7,28 @@ const STATUS_LABELS = {
   demo: "デモ",
 };
 
-const CAUSE_LABELS = {
-  network: "通信異常",
-  physical: "物理環境",
-  combined: "複合（物理＋通信）",
-};
-
-const SEVERITY_LABELS = {
-  watch: "注意",
-  urgent: "緊急",
-  critical: "直ちに対応",
-};
+const DEMO_PI_IP = "192.168.1.50";
 
 const state = {
   pps: 0,
   total: 0,
   alerts: 0,
   flows: [],
+  flowRows: [],
   status: "waiting",
   demo: false,
+  webDemo: false,
   demoTimer: null,
   lastProtocol: "—",
-  activeView: "tech",
-  guidance: null,
-  fhirSnapshot: null,
+  highlightUntil: 0,
+  highlightSrc: null,
 };
 
 const protocolColors = {
-  TCP: "#28c76f",
-  UDP: "#00cfe8",
-  ICMP: "#ff9f43",
-  OTHER: "#8392a5",
+  TCP: "#3ecf8e",
+  UDP: "#4cc9f0",
+  ICMP: "#f4a261",
+  OTHER: "#94a3b8",
 };
 
 const els = {};
@@ -46,33 +37,26 @@ function cacheElements() {
   els.status = document.querySelector("#stream-status");
   els.statusDot = document.querySelector("#stream-dot");
   els.demoToggle = document.querySelector("#demo-toggle");
+  els.webBanner = document.querySelector("#web-banner");
+  els.boothPanel = document.querySelector("#booth-panel");
+  els.simulateButton = document.querySelector("#simulate-button");
   els.ppsValue = document.querySelector("#pps-value");
   els.totalValue = document.querySelector("#total-value");
   els.protocolValue = document.querySelector("#protocol-value");
   els.alertCount = document.querySelector("#alert-count");
   els.flowCount = document.querySelector("#flow-count");
   els.alertLog = document.querySelector("#alert-log");
+  els.flowList = document.querySelector("#flow-list");
   els.flash = document.querySelector("#attack-flash");
   els.meter = document.querySelector("#pps-meter");
   els.waterfall = document.querySelector("#waterfall");
-  els.viewTabs = document.querySelectorAll(".view-tab");
-  els.viewPanels = {
-    tech: document.querySelector("#view-tech"),
-    clinical: document.querySelector("#view-clinical"),
-    degraded: document.querySelector("#view-degraded"),
-  };
-  els.clinicalHeadline = document.querySelector("#clinical-headline");
-  els.clinicalSummary = document.querySelector("#clinical-summary");
-  els.clinicalBadge = document.querySelector("#clinical-badge");
-  els.clinicalActions = document.querySelector("#clinical-actions");
-  els.clinicalUnaffected = document.querySelector("#clinical-unaffected");
-  els.clinicalSources = document.querySelector("#clinical-sources");
-  els.degradedNote = document.querySelector("#degraded-note");
-  els.patientGrid = document.querySelector("#patient-grid");
+  els.toast = document.querySelector("#action-toast");
+  els.toastLabel = document.querySelector("#toast-label");
+  els.toastDetail = document.querySelector("#toast-detail");
 }
 
 function setStatus(status) {
-  const key = state.demo ? "demo" : status;
+  const key = state.demo || state.webDemo ? "demo" : status;
   state.status = key;
   els.status.textContent = STATUS_LABELS[key] ?? key;
   els.statusDot.className = `status-dot ${key}`;
@@ -80,6 +64,20 @@ function setStatus(status) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("ja-JP").format(value);
+}
+
+function showActionToast(label, detail) {
+  els.toastLabel.textContent = label;
+  els.toastDetail.textContent = detail;
+  els.toast.hidden = false;
+  els.toast.classList.add("visible");
+  window.clearTimeout(showActionToast.timer);
+  showActionToast.timer = window.setTimeout(() => {
+    els.toast.classList.remove("visible");
+    window.setTimeout(() => {
+      els.toast.hidden = true;
+    }, 280);
+  }, 4200);
 }
 
 function handleEvent(event) {
@@ -97,42 +95,48 @@ function handleEvent(event) {
     return;
   }
 
+  if (event.type === "physical_action") {
+    showActionToast(
+      event.label ?? "物理操作",
+      `${event.node_id ?? "node"} — パケット待ち…`,
+    );
+    return;
+  }
+
+  if (event.type === "action_correlated") {
+    const detail = `${event.protocol} ${event.src}:${event.src_port} → ${event.dst}:${event.dst_port}`;
+    showActionToast(`「${event.label}」を捕捉`, detail);
+    state.highlightSrc = event.src;
+    state.highlightUntil = performance.now() + 5000;
+    pushFlow(event, true);
+    updateStats();
+    renderFlowList();
+    return;
+  }
+
   if (event.type === "flow") {
     state.total += 1;
     state.lastProtocol = event.protocol ?? "OTHER";
-    state.flows.push({
-      protocol: state.lastProtocol,
-      src: event.src ?? "0.0.0.0",
-      dst: event.dst ?? "0.0.0.0",
-      srcPort: event.src_port ?? 0,
-      dstPort: event.dst_port ?? 0,
-      at: performance.now(),
-    });
-    state.flows = state.flows.slice(-140);
+    pushFlow(event, false);
     updateStats();
-    return;
+    renderFlowList();
   }
+}
 
-  if (event.type === "sensor") {
-    return;
-  }
-
-  if (event.type === "guidance") {
-    state.guidance = event;
-    renderClinical(event);
-    if (event.degraded) {
-      switchView("degraded");
-    } else {
-      switchView("clinical");
-    }
-    return;
-  }
-
-  if (event.type === "fhir_snapshot") {
-    state.fhirSnapshot = event;
-    renderDegraded(event);
-    switchView("degraded");
-  }
+function pushFlow(event, highlighted) {
+  const entry = {
+    protocol: event.protocol ?? "OTHER",
+    src: event.src ?? "0.0.0.0",
+    dst: event.dst ?? "0.0.0.0",
+    srcPort: event.src_port ?? 0,
+    dstPort: event.dst_port ?? 0,
+    at: performance.now(),
+    highlighted,
+  };
+  state.flows.push(entry);
+  state.flows = state.flows.slice(-160);
+  state.flowRows.unshift(entry);
+  state.flowRows = state.flowRows.slice(0, 12);
 }
 
 function updateStats() {
@@ -141,6 +145,16 @@ function updateStats() {
   els.protocolValue.textContent = state.lastProtocol;
   els.alertCount.textContent = formatNumber(state.alerts);
   els.flowCount.textContent = `${formatNumber(state.flows.length)} 件`;
+}
+
+function renderFlowList() {
+  els.flowList.replaceChildren();
+  state.flowRows.forEach((flow) => {
+    const row = document.createElement("div");
+    row.className = `flow-item${flow.highlighted ? " flow-item--hit" : ""}`;
+    row.innerHTML = `<strong>${flow.protocol}</strong><span>${flow.src}:${flow.srcPort} → ${flow.dst}:${flow.dstPort}</span>`;
+    els.flowList.appendChild(row);
+  });
 }
 
 function addAlert(event) {
@@ -152,103 +166,11 @@ function addAlert(event) {
   item.className = "alert-item";
   const target = event.dst ?? "不明";
   const rate = formatNumber(event.rate ?? 0);
-  item.innerHTML = `<strong>${target}</strong><span>${rate} PPS で超過</span>`;
+  item.innerHTML = `<strong>${target}</strong><span>${rate} pps 超過</span>`;
   els.alertLog.prepend(item);
-
-  while (els.alertLog.children.length > 5) {
+  while (els.alertLog.children.length > 6) {
     els.alertLog.lastElementChild.remove();
   }
-}
-
-function renderClinical(guidance) {
-  const severity = guidance.severity ?? "watch";
-  const cause = guidance.cause ?? "network";
-
-  els.clinicalHeadline.textContent = guidance.headline ?? "異常を検知しました";
-  els.clinicalSummary.textContent =
-    guidance.summary ?? "低レイヤ観測に基づく初動判断です。";
-  els.clinicalBadge.textContent = `${SEVERITY_LABELS[severity] ?? severity} / ${
-    CAUSE_LABELS[cause] ?? cause
-  }`;
-  els.clinicalBadge.className = `clinical-badge clinical-badge--${severity}`;
-
-  els.clinicalActions.replaceChildren();
-  const actions = guidance.actions ?? [];
-  if (actions.length === 0) {
-    const item = document.createElement("li");
-    item.className = "action-item action-item--calm";
-    item.textContent = "初動手順はありません。";
-    els.clinicalActions.appendChild(item);
-  } else {
-    actions
-      .slice()
-      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
-      .forEach((action) => {
-        const item = document.createElement("li");
-        item.className = "action-item";
-        item.textContent = action.text ?? "";
-        els.clinicalActions.appendChild(item);
-      });
-  }
-
-  els.clinicalUnaffected.textContent =
-    guidance.unaffected_note ?? "影響範囲の追加情報はありません。";
-
-  els.clinicalSources.replaceChildren();
-  const sources = guidance.sources ?? [];
-  if (sources.length === 0) {
-    const item = document.createElement("li");
-    item.textContent = "根拠データはありません。";
-    els.clinicalSources.appendChild(item);
-  } else {
-    sources.forEach((source) => {
-      const item = document.createElement("li");
-      item.innerHTML = `<strong>${source.kind ?? "source"}</strong> ${source.detail ?? ""}`;
-      els.clinicalSources.appendChild(item);
-    });
-  }
-}
-
-function renderDegraded(snapshot) {
-  els.degradedNote.textContent =
-    snapshot.note ??
-    "模擬 FHIR データです。実診療データの救出は検証用の設計可能性確認のみを目的としています。";
-
-  const patients = snapshot.patients ?? [];
-  els.patientGrid.replaceChildren();
-
-  if (patients.length === 0) {
-    const card = document.createElement("article");
-    card.className = "patient-card patient-card--empty";
-    card.innerHTML = "<p>表示できる患者データがありません。</p>";
-    els.patientGrid.appendChild(card);
-    return;
-  }
-
-  patients.forEach((patient) => {
-    const card = document.createElement("article");
-    card.className = "patient-card";
-    card.innerHTML = `
-      <header class="patient-card__header">
-        <strong>${patient.name ?? "不明"}</strong>
-        <span>${patient.room ?? "—"}</span>
-      </header>
-      <p class="patient-card__id">ID: ${patient.id ?? "—"}</p>
-      <p class="patient-card__complaint">${patient.chief_complaint ?? ""}</p>
-      <p class="patient-card__vitals">${patient.last_vitals ?? ""}</p>
-    `;
-    els.patientGrid.appendChild(card);
-  });
-}
-
-function switchView(view) {
-  state.activeView = view;
-  els.viewTabs.forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.view === view);
-  });
-  Object.entries(els.viewPanels).forEach(([key, panel]) => {
-    panel.hidden = key !== view;
-  });
 }
 
 function fitCanvasToDisplay(canvas) {
@@ -291,14 +213,14 @@ function drawMeter() {
   ctx.lineWidth = Math.max(10, Math.round(height * 0.08));
 
   ctx.beginPath();
-  ctx.strokeStyle = "#233044";
+  ctx.strokeStyle = "#1e293b";
   ctx.arc(cx, cy, radius, start, end);
   ctx.stroke();
 
   const gradient = ctx.createLinearGradient(cx - radius, cy, cx + radius, cy);
-  gradient.addColorStop(0, "#28c76f");
-  gradient.addColorStop(0.55, "#00cfe8");
-  gradient.addColorStop(1, "#ea5455");
+  gradient.addColorStop(0, "#3ecf8e");
+  gradient.addColorStop(0.55, "#4cc9f0");
+  gradient.addColorStop(1, "#ef4444");
 
   ctx.beginPath();
   ctx.strokeStyle = gradient;
@@ -315,11 +237,6 @@ function drawMeter() {
   ctx.lineWidth = 4;
   ctx.stroke();
   ctx.restore();
-
-  ctx.beginPath();
-  ctx.fillStyle = "#f8fafc";
-  ctx.arc(cx, cy, 8, 0, Math.PI * 2);
-  ctx.fill();
 }
 
 function drawWaterfall() {
@@ -328,24 +245,35 @@ function drawWaterfall() {
   const width = canvas.width;
   const height = canvas.height;
   const now = performance.now();
+  const highlightActive = now < state.highlightUntil;
 
-  ctx.fillStyle = "rgba(10, 15, 24, 0.34)";
+  ctx.fillStyle = "rgba(8, 12, 20, 0.42)";
   ctx.fillRect(0, 0, width, height);
 
   state.flows.forEach((flow, index) => {
     const age = Math.min((now - flow.at) / 6000, 1);
-    const x = (index / 140) * width;
+    const x = (index / 160) * width;
     const y = age * height;
     const length = 18 + (flow.dstPort % 46);
     const color = protocolColors[flow.protocol] ?? protocolColors.OTHER;
+    const isHit =
+      flow.highlighted ||
+      (highlightActive && flow.src === state.highlightSrc && age < 0.2);
 
     ctx.globalAlpha = 1 - age * 0.75;
     ctx.strokeStyle = color;
-    ctx.lineWidth = flow.protocol === "TCP" ? 2.4 : 1.6;
+    ctx.lineWidth = isHit ? 3.6 : flow.protocol === "TCP" ? 2.2 : 1.6;
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x + length, y + 16);
     ctx.stroke();
+
+    if (isHit) {
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = "#fde047";
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(x - 2, y - 2, length + 8, 22);
+    }
   });
 
   ctx.globalAlpha = 1;
@@ -358,104 +286,114 @@ function animate() {
 }
 
 function randomIp() {
-  return `10.10.${Math.floor(Math.random() * 4)}.${2 + Math.floor(Math.random() * 220)}`;
+  return `192.168.1.${40 + Math.floor(Math.random() * 10)}`;
 }
 
 function emitDemoFlow() {
   const protocols = ["TCP", "UDP", "ICMP"];
-  const burst = 4 + Math.floor(Math.random() * 10);
-
+  const burst = 3 + Math.floor(Math.random() * 8);
   for (let i = 0; i < burst; i += 1) {
     handleEvent({
       type: "flow",
       protocol: protocols[Math.floor(Math.random() * protocols.length)],
       src: randomIp(),
       src_port: 1024 + Math.floor(Math.random() * 50000),
-      dst: "10.10.0.1",
-      dst_port: [22, 80, 443, 8081][Math.floor(Math.random() * 4)],
+      dst: "192.168.1.10",
+      dst_port: [80, 443, 8080][Math.floor(Math.random() * 3)],
     });
   }
-
-  const baseline = 80 + Math.floor(Math.random() * 260);
-  state.pps = Math.random() > 0.82 ? baseline + 700 : baseline;
+  const baseline = 60 + Math.floor(Math.random() * 220);
+  state.pps = Math.random() > 0.88 ? baseline + 700 : baseline;
   if (state.pps > 650) {
-    handleEvent({ type: "alert", dst: "10.10.0.1", rate: state.pps });
+    handleEvent({ type: "alert", dst: "192.168.1.10", rate: state.pps });
   }
   updateStats();
 }
 
-function emitDemoGuidance() {
+function emitSimulatedButtonPress() {
+  const srcPort = 52000 + Math.floor(Math.random() * 800);
   handleEvent({
-    type: "guidance",
-    scenario: "lateral_movement",
-    cause: "network",
-    severity: "critical",
-    headline: "受付端末から異常な横展開通信を検知しました",
-    summary: "端末 10.10.0.50 が短時間に多数の宛先へ不審な通信を送信しています。",
-    actions: [
-      {
-        priority: 1,
-        text: "直ちに端末 10.10.0.50 の LAN ケーブルを物理的に抜くか、Wi-Fi をオフにしてください。",
-        reversible: true,
-      },
-      {
-        priority: 2,
-        text: "その端末での電子カルテの操作を直ちに中止してください。",
-        reversible: true,
-      },
-      {
-        priority: 3,
-        text: "他の診察室の端末は通常通り利用可能です。",
-        reversible: true,
-      },
-    ],
-    unaffected_note: "他の診察室の端末は通常通り利用可能です。",
-    sources: [
-      { kind: "flow", detail: "src=10.10.0.50 が 10 宛先へ短時間接続" },
-      { kind: "rule", detail: "lateral_movement: unique_dst>=8 within 5s" },
-    ],
-    degraded: false,
+    type: "physical_action",
+    node_id: "booth-pi-1",
+    action: "check_status",
+    label: "状態確認ボタン",
+    src_ip: DEMO_PI_IP,
   });
+  window.setTimeout(() => {
+    handleEvent({
+      type: "action_correlated",
+      node_id: "booth-pi-1",
+      action: "check_status",
+      label: "状態確認ボタン",
+      protocol: "TCP",
+      src: DEMO_PI_IP,
+      src_port: srcPort,
+      dst: "192.168.1.10",
+      dst_port: 8080,
+    });
+  }, 180);
+}
+
+function startBackgroundDemo() {
+  if (state.demoTimer) {
+    return;
+  }
+  state.demo = true;
+  els.demoToggle.setAttribute("aria-pressed", "true");
+  els.demoToggle.classList.add("active");
+  setStatus("demo");
+  state.demoTimer = window.setInterval(emitDemoFlow, 2000);
+}
+
+function stopBackgroundDemo() {
+  window.clearInterval(state.demoTimer);
+  state.demoTimer = null;
+  state.demo = false;
+  els.demoToggle.setAttribute("aria-pressed", "false");
+  els.demoToggle.classList.remove("active");
 }
 
 function toggleDemo() {
-  state.demo = !state.demo;
-  els.demoToggle.setAttribute("aria-pressed", String(state.demo));
-  els.demoToggle.classList.toggle("active", state.demo);
-
-  if (state.demo) {
-    setStatus("demo");
-    state.demoTimer = window.setInterval(() => {
-      emitDemoFlow();
-      if (Math.random() > 0.7) {
-        emitDemoGuidance();
-      }
-    }, 1800);
+  if (state.demoTimer) {
+    stopBackgroundDemo();
+    setStatus("waiting");
     return;
   }
+  startBackgroundDemo();
+}
 
-  window.clearInterval(state.demoTimer);
-  state.demoTimer = null;
-  setStatus(state.status === "demo" ? "waiting" : state.status);
+function setupWebDemo() {
+  state.webDemo = true;
+  els.webBanner.hidden = false;
+  els.boothPanel.hidden = false;
+  els.demoToggle.hidden = true;
+  startBackgroundDemo();
+  els.simulateButton.addEventListener("click", () => {
+    els.simulateButton.disabled = true;
+    emitSimulatedButtonPress();
+    window.setTimeout(() => {
+      els.simulateButton.disabled = false;
+    }, 600);
+  });
 }
 
 async function connectStream() {
   const mode = await subscribeStream({
     onStatus(status) {
-      if (!state.demo) {
+      if (!state.demo && !state.webDemo) {
         setStatus(status);
       }
     },
     onEvent(event) {
-      if (state.demo) {
+      if (state.demo || state.webDemo) {
         return;
       }
       handleEvent(event);
     },
   });
 
-  if (mode === "web" && !state.demo) {
-    toggleDemo();
+  if (mode === "web" || isWebDemo()) {
+    setupWebDemo();
   }
 }
 
@@ -464,9 +402,6 @@ window.addEventListener("DOMContentLoaded", () => {
   updateStats();
   setStatus("waiting");
   els.demoToggle.addEventListener("click", toggleDemo);
-  els.viewTabs.forEach((tab) => {
-    tab.addEventListener("click", () => switchView(tab.dataset.view));
-  });
   setupCanvasSizing();
   connectStream();
   animate();
