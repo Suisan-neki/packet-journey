@@ -62,14 +62,6 @@
     </nav>
 
     <main class="main-canvas" id="main-canvas">
-      <div id="layer-span" class="layer-span" hidden aria-hidden="true">
-        <span class="layer-span__chip layer-span__chip--high">L7 操作</span>
-        <span class="layer-span__line"></span>
-        <span class="layer-span__label">同じ出来事</span>
-        <span class="layer-span__line"></span>
-        <span class="layer-span__chip layer-span__chip--low">L4·L3·L2 パケット</span>
-      </div>
-
       <aside class="osi-stack" id="osi-stack" aria-label="OSI参照モデル">
         <header class="osi-stack__header">
           <h2 class="osi-stack__title">OSI参照モデル</h2>
@@ -135,10 +127,7 @@
         </div>
 
         <div class="waterfall-intro">
-          <p>
-            この領域は OSI の<strong>L4（TCP/UDP）</strong>・<strong>L3（IP）</strong>・<strong>L2（データリンク）</strong>に相当します。
-            1つ1つが<strong>パケット</strong>として記録されます。
-          </p>
+          <p>L2〜L4 のパケット。色はプロトコル（TCP <span class="osi-inline">L4</span> など）です。</p>
           <ul class="waterfall-legend" aria-label="プロトコルとOSI層の対応">
             <li class="waterfall-legend__item waterfall-legend__item--tcp">
               <span class="waterfall-legend__dot"></span>

@@ -122,7 +122,6 @@ function cacheElements() {
   els.layerBridgeCard = document.querySelector("#layer-bridge-card");
   els.bridgeHighText = document.querySelector("#bridge-high-text");
   els.bridgeLowText = document.querySelector("#bridge-low-text");
-  els.layerSpan = document.querySelector("#layer-span");
   els.mainCanvas = document.querySelector("#main-canvas");
   els.panelLeft = document.querySelector(".panel--left");
   els.panelRight = document.querySelector(".panel--right");
@@ -257,12 +256,10 @@ function showLayerBridge(label, protocol, route) {
   els.bridgeHighText.textContent = `L7:「${label}」ボタンを押した`;
   els.bridgeLowText.textContent = `${osiLabel} ${meta.name} + L3 IP — ${route}（L2で観測）`;
   els.layerBridgeCard.hidden = false;
-  els.layerSpan.hidden = false;
 }
 
 function hideLayerBridge() {
   els.layerBridgeCard.hidden = true;
-  els.layerSpan.hidden = true;
   els.mainCanvas?.classList.remove("main-canvas--linked");
 }
 
@@ -371,7 +368,8 @@ function dropPacket(event, { highlight = false } = {}) {
   el.className = `packet-drop ${protocolClass(protocol)}${
     highlight ? " packet-drop--hit" : ""
   }`;
-  el.style.left = `${6 + Math.random() * 82}%`;
+  el.style.left = `${4 + Math.random() * 62}%`;
+  el.style.maxWidth = "min(260px, 88%)";
   el.style.animationDuration = `${highlight ? 3.4 : 2.2 + Math.random() * 1.2}s`;
 
   const proto = document.createElement("span");
