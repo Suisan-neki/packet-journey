@@ -62,15 +62,46 @@
       <section class="panel panel--left">
         <div class="metrics-header">
           <div>
-            <h2 class="panel-label">現在の通信速度</h2>
-            <div id="pps-value" class="pps-value">0</div>
+            <h2 class="panel-label">1秒あたりのパケット数</h2>
+            <div class="pps-row">
+              <div id="pps-value" class="pps-value">0</div>
+              <span class="pps-unit">パケット/秒</span>
+            </div>
           </div>
           <div class="metrics-total">
-            <h3 class="panel-sublabel">累計通信数</h3>
+            <h3 class="panel-sublabel">観測したパケット（累計）</h3>
             <div id="total-value" class="total-value">0</div>
           </div>
         </div>
-        <div id="waterfall-container" class="waterfall" aria-label="通信の流れ"></div>
+
+        <div class="waterfall-intro">
+          <p>
+            下に流れる1つ1つが、ネットワークを走る<strong>パケット</strong>（データのかたまり）です。
+            色とラベルは<strong>通信のルール（プロトコル）</strong>を表します。
+          </p>
+          <ul class="waterfall-legend" aria-label="プロトコルの凡例">
+            <li class="waterfall-legend__item waterfall-legend__item--tcp">
+              <span class="waterfall-legend__dot"></span>
+              <span><strong>TCP</strong> — 届いたか確認しながら送る（Web など）</span>
+            </li>
+            <li class="waterfall-legend__item waterfall-legend__item--udp">
+              <span class="waterfall-legend__dot"></span>
+              <span><strong>UDP</strong> — 確認なしで送る（動画・DNS など）</span>
+            </li>
+            <li class="waterfall-legend__item waterfall-legend__item--icmp">
+              <span class="waterfall-legend__dot"></span>
+              <span><strong>ICMP</strong> — 「応答ある？」と問い合わせる（疎通確認）</span>
+            </li>
+          </ul>
+        </div>
+
+        <div id="packet-latest" class="packet-latest packet-latest--idle" aria-live="polite">
+          パケットが流れると、いちばん新しい通信の種類と行き先がここに表示されます
+        </div>
+
+        <div id="waterfall-container" class="waterfall" aria-label="流れるパケット">
+          <p id="waterfall-idle" class="waterfall-idle">待機中…</p>
+        </div>
       </section>
 
       <section class="panel panel--right">
@@ -85,10 +116,17 @@
 
         <div class="detail-card">
           <h3 class="panel-sublabel">裏側で見えたデータ</h3>
+          <div id="behind-protocol" class="proto-badge proto-badge--idle">—</div>
           <div class="ip-pair">
-            <span id="behind-src">—</span>
+            <div class="ip-endpoint">
+              <span id="behind-src">—</span>
+              <span id="behind-src-port" class="ip-port"></span>
+            </div>
             <span class="ip-pair__arrow" aria-hidden="true">→</span>
-            <span id="behind-dst">—</span>
+            <div class="ip-endpoint">
+              <span id="behind-dst">—</span>
+              <span id="behind-dst-port" class="ip-port"></span>
+            </div>
           </div>
           <p id="behind-summary" class="behind-summary">
             操作に対応する通信がここに表示されます。
@@ -96,6 +134,12 @@
         </div>
 
         <div class="flow-list-wrap">
+          <div class="flow-list-header" aria-hidden="true">
+            <span>時刻</span>
+            <span>種類</span>
+            <span>送信元</span>
+            <span>宛先</span>
+          </div>
           <div id="flow-list" class="flow-list"></div>
         </div>
 

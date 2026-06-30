@@ -212,10 +212,23 @@ button {
   gap: 24px;
 }
 
+.pps-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
 .pps-value {
   font-size: clamp(64px, 8vw, 84px);
   font-weight: 700;
   line-height: 1;
+}
+
+.pps-unit {
+  color: var(--on-surface-variant);
+  font-size: 18px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .metrics-total {
@@ -230,61 +243,219 @@ button {
   letter-spacing: 0.08em;
 }
 
+.waterfall-intro {
+  margin-top: 20px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--outline);
+  color: var(--on-surface-variant);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.waterfall-intro strong {
+  color: var(--on-surface);
+  font-weight: 500;
+}
+
+.waterfall-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waterfall-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.waterfall-legend__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.waterfall-legend__item--tcp .waterfall-legend__dot {
+  background: var(--proto-tcp);
+}
+
+.waterfall-legend__item--udp .waterfall-legend__dot {
+  background: var(--proto-udp);
+}
+
+.waterfall-legend__item--icmp .waterfall-legend__dot {
+  background: var(--proto-icmp);
+}
+
+.packet-latest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.packet-latest--idle {
+  color: var(--on-surface-variant);
+  font-size: 13px;
+}
+
+.packet-latest--hit {
+  border-color: var(--highlight);
+  box-shadow: 0 0 0 1px rgba(232, 197, 71, 0.25);
+}
+
+.packet-latest__body {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.proto-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.proto-badge--idle {
+  color: var(--on-surface-variant);
+  border-color: var(--outline);
+}
+
+.proto-badge--tcp {
+  color: var(--proto-tcp);
+  border-color: rgba(76, 175, 125, 0.5);
+  background: rgba(76, 175, 125, 0.1);
+}
+
+.proto-badge--udp {
+  color: var(--proto-udp);
+  border-color: rgba(94, 184, 201, 0.5);
+  background: rgba(94, 184, 201, 0.1);
+}
+
+.proto-badge--icmp {
+  color: var(--proto-icmp);
+  border-color: rgba(212, 145, 90, 0.5);
+  background: rgba(212, 145, 90, 0.1);
+}
+
+.proto-badge--other {
+  color: var(--on-surface-variant);
+  border-color: var(--outline);
+}
+
 .waterfall {
   position: relative;
   flex: 1;
   min-height: 200px;
-  margin-top: 32px;
+  margin-top: 12px;
   overflow: hidden;
-  border-top: 1px solid var(--outline);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.15);
 }
 
-.waterfall-line {
+.waterfall-idle {
   position: absolute;
-  top: -60px;
-  width: 4px;
-  border-radius: 2px;
-  background: currentColor;
-  opacity: 0.55;
-  animation: fall linear infinite;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 24px;
+  color: var(--on-surface-variant);
+  font-size: 14px;
+  text-align: center;
 }
 
-.waterfall-line--hit {
+.packet-drop {
+  position: absolute;
+  top: -72px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 200px;
+  max-width: min(320px, 42vw);
+  padding: 8px 12px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: rgba(17, 19, 25, 0.92);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: packet-fall linear forwards;
+  pointer-events: none;
+}
+
+.packet-drop--hit {
+  border-width: 2px;
   color: var(--highlight) !important;
-  opacity: 0.95;
-  width: 5px;
-  box-shadow: 0 0 12px rgba(232, 197, 71, 0.45);
+  box-shadow: 0 0 16px rgba(232, 197, 71, 0.35);
 }
 
-.waterfall-line--tcp {
+.packet-drop--tcp {
   color: var(--proto-tcp);
 }
 
-.waterfall-line--udp {
+.packet-drop--udp {
   color: var(--proto-udp);
 }
 
-.waterfall-line--icmp {
+.packet-drop--icmp {
   color: var(--proto-icmp);
 }
 
-.waterfall-line--other {
+.packet-drop--other {
   color: var(--on-surface-variant);
 }
 
-@keyframes fall {
+.packet-drop__proto {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.packet-drop__route {
+  font-family: var(--mono);
+  font-size: 12px;
+  opacity: 0.95;
+}
+
+.packet-drop__role {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+@keyframes packet-fall {
   0% {
-    transform: translateY(-80px);
+    transform: translateY(-40px);
     opacity: 0;
   }
-  10% {
-    opacity: 0.75;
+  8% {
+    opacity: 1;
   }
-  90% {
-    opacity: 0.75;
+  92% {
+    opacity: 1;
   }
   100% {
-    transform: translateY(110%);
+    transform: translateY(520px);
     opacity: 0;
   }
 }
@@ -320,6 +491,23 @@ button {
   font-size: 16px;
 }
 
+.ip-endpoint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ip-port {
+  color: var(--on-surface-variant);
+  font-family: var(--font);
+  font-size: 11px;
+}
+
+.detail-card .proto-badge {
+  margin-bottom: 12px;
+}
+
 .ip-pair__arrow {
   color: var(--on-surface-variant);
 }
@@ -348,23 +536,45 @@ button {
   overflow-y: auto;
 }
 
+.flow-list-header,
 .flow-row {
   display: grid;
-  grid-template-columns: 72px 1fr 1fr;
+  grid-template-columns: 64px 52px 1fr 1fr;
   gap: 8px;
   align-items: center;
-  padding: 12px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.flow-list-header {
+  flex-shrink: 0;
+  margin-bottom: 4px;
+  padding-bottom: 0;
+  color: var(--on-surface-variant);
+  font-family: var(--font);
+  font-size: 11px;
+}
+
+.flow-row {
   border: 1px solid transparent;
   border-radius: var(--radius);
   color: var(--on-surface-variant);
-  font-family: var(--mono);
-  font-size: 13px;
 }
 
 .flow-row--hit {
   border-color: var(--outline);
   color: var(--primary);
   font-weight: 500;
+}
+
+.flow-row__proto {
+  justify-self: start;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font);
 }
 
 .flow-row--dim {

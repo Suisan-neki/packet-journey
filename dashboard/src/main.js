@@ -8,7 +8,30 @@ const STATUS_LABELS = {
 };
 
 const DEMO_PI_IP = "192.168.1.50";
-const WATERFALL_LINES = 60;
+const MAX_PACKETS = 12;
+
+const PROTOCOL_META = {
+  TCP: {
+    name: "TCP",
+    hint: "届いたか確認しながら送る",
+    explain: "Web ページの取得など、確実なやり取りに使われます",
+  },
+  UDP: {
+    name: "UDP",
+    hint: "確認なしで送る",
+    explain: "動画配信や名前解決など、速度優先の通信に使われます",
+  },
+  ICMP: {
+    name: "ICMP",
+    hint: "応答があるか調べる",
+    explain: "「そこにいますか？」という疎通確認に使われます",
+  },
+  OTHER: {
+    name: "その他",
+    hint: "その他の形式",
+    explain: "上記以外の通信ルールです",
+  },
+};
 
 const state = {
   pps: 0,
@@ -37,16 +60,73 @@ function cacheElements() {
   els.ppsValue = document.querySelector("#pps-value");
   els.totalValue = document.querySelector("#total-value");
   els.waterfall = document.querySelector("#waterfall-container");
+  els.waterfallIdle = document.querySelector("#waterfall-idle");
+  els.packetLatest = document.querySelector("#packet-latest");
   els.flowList = document.querySelector("#flow-list");
   els.alertLog = document.querySelector("#alert-log");
   els.flash = document.querySelector("#attack-flash");
   els.currentAction = document.querySelector("#current-action");
+  els.behindProtocol = document.querySelector("#behind-protocol");
   els.behindSrc = document.querySelector("#behind-src");
+  els.behindSrcPort = document.querySelector("#behind-src-port");
   els.behindDst = document.querySelector("#behind-dst");
+  els.behindDstPort = document.querySelector("#behind-dst-port");
   els.behindSummary = document.querySelector("#behind-summary");
   els.captureToast = document.querySelector("#capture-toast");
   els.captureToastText = document.querySelector("#capture-toast-text");
   els.flowSteps = document.querySelectorAll(".flow-map__step");
+}
+
+function protocolMeta(protocol) {
+  return PROTOCOL_META[protocol] ?? PROTOCOL_META.OTHER;
+}
+
+function portHint(port) {
+  switch (port) {
+    case 80:
+      return "Web（HTTP）";
+    case 443:
+      return "Web（HTTPS）";
+    case 8080:
+      return "展示サーバー（状態確認）";
+    case 53:
+      return "名前解決（DNS）";
+    default:
+      return `ポート ${port}`;
+  }
+}
+
+function formatEndpoint(ip, port) {
+  if (port) {
+    return `${ip}:${port}`;
+  }
+  return ip ?? "—";
+}
+
+function protocolClass(protocol) {
+  switch (protocol) {
+    case "TCP":
+      return "packet-drop--tcp";
+    case "UDP":
+      return "packet-drop--udp";
+    case "ICMP":
+      return "packet-drop--icmp";
+    default:
+      return "packet-drop--other";
+  }
+}
+
+function protoBadgeClass(protocol) {
+  switch (protocol) {
+    case "TCP":
+      return "proto-badge--tcp";
+    case "UDP":
+      return "proto-badge--udp";
+    case "ICMP":
+      return "proto-badge--icmp";
+    default:
+      return "proto-badge--other";
+  }
 }
 
 function setStatus(status) {
@@ -90,11 +170,11 @@ function showCaptureToast(message) {
   }, 4000);
 }
 
-function plainSummary(label, src, dst) {
-  if (src && dst && src !== "—" && dst !== "—") {
-    return `「${label}」という信号が、${src} と ${dst} の間でやり取りされました。`;
-  }
-  return `「${label}」という操作が、ネットワーク上では送信元と宛先の間の通信として見えます。`;
+function correlatedSummary(label, protocol, src, srcPort, dst, dstPort) {
+  const meta = protocolMeta(protocol);
+  const route = `${formatEndpoint(src, srcPort)} → ${formatEndpoint(dst, dstPort)}`;
+  const purpose = dstPort ? portHint(dstPort) : meta.hint;
+  return `【${label}】の操作は ${meta.name}（${meta.hint}）のパケットとして ${route} を通りました。${purpose} への通信です。`;
 }
 
 function setCurrentAction(text, active = true) {
@@ -105,6 +185,109 @@ function setCurrentAction(text, active = true) {
 function updateStats() {
   els.ppsValue.textContent = formatNumber(state.pps);
   els.totalValue.textContent = formatNumber(state.total);
+}
+
+function setBehindData(event) {
+  const protocol = event.protocol ?? "OTHER";
+  const meta = protocolMeta(protocol);
+
+  els.behindProtocol.textContent = `${meta.name} — ${meta.hint}`;
+  els.behindProtocol.className = `proto-badge ${protoBadgeClass(protocol)}`;
+  els.behindSrc.textContent = event.src ?? "—";
+  els.behindDst.textContent = event.dst ?? "—";
+
+  if (event.src_port) {
+    els.behindSrcPort.textContent = `ポート ${event.src_port}`;
+  } else {
+    els.behindSrcPort.textContent = "";
+  }
+
+  if (event.dst_port) {
+    els.behindDstPort.textContent = portHint(event.dst_port);
+  } else {
+    els.behindDstPort.textContent = "";
+  }
+
+  els.behindSummary.textContent = correlatedSummary(
+    event.label ?? state.lastActionLabel ?? "操作",
+    protocol,
+    event.src,
+    event.src_port,
+    event.dst,
+    event.dst_port,
+  );
+}
+
+function updateLatestPacket(event, highlight = false) {
+  const protocol = event.protocol ?? "OTHER";
+  const meta = protocolMeta(protocol);
+  const route = `${formatEndpoint(event.src, event.src_port)} → ${formatEndpoint(
+    event.dst,
+    event.dst_port,
+  )}`;
+  const purpose = event.dst_port ? portHint(event.dst_port) : meta.explain;
+
+  els.packetLatest.classList.remove("packet-latest--idle");
+  if (highlight) {
+    els.packetLatest.classList.add("packet-latest--hit");
+  } else {
+    els.packetLatest.classList.remove("packet-latest--hit");
+  }
+
+  els.packetLatest.replaceChildren();
+
+  const badge = document.createElement("span");
+  badge.className = `proto-badge ${protoBadgeClass(protocol)}`;
+  badge.textContent = meta.name;
+
+  const body = document.createElement("span");
+  body.className = "packet-latest__body";
+  body.textContent = `${meta.hint} ｜ ${route} ｜ ${purpose}`;
+
+  els.packetLatest.append(badge, body);
+}
+
+function dropPacket(event, { highlight = false } = {}) {
+  const protocol = event.protocol ?? "OTHER";
+  const meta = protocolMeta(protocol);
+
+  if (els.waterfallIdle) {
+    els.waterfallIdle.hidden = true;
+  }
+
+  const el = document.createElement("div");
+  el.className = `packet-drop ${protocolClass(protocol)}${
+    highlight ? " packet-drop--hit" : ""
+  }`;
+  el.style.left = `${6 + Math.random() * 82}%`;
+  el.style.animationDuration = `${highlight ? 3.4 : 2.2 + Math.random() * 1.2}s`;
+
+  const proto = document.createElement("span");
+  proto.className = "packet-drop__proto";
+  proto.textContent = `${meta.name} — ${meta.hint}`;
+
+  const route = document.createElement("span");
+  route.className = "packet-drop__route";
+  route.textContent = `${formatEndpoint(event.src, event.src_port)} → ${formatEndpoint(
+    event.dst,
+    event.dst_port,
+  )}`;
+
+  const role = document.createElement("span");
+  role.className = "packet-drop__role";
+  role.textContent = event.dst_port ? portHint(event.dst_port) : meta.explain;
+
+  el.append(proto, route, role);
+  els.waterfall.appendChild(el);
+
+  const drops = els.waterfall.querySelectorAll(".packet-drop");
+  if (drops.length > MAX_PACKETS) {
+    drops[0].remove();
+  }
+
+  el.addEventListener("animationend", () => el.remove());
+
+  updateLatestPacket(event, highlight);
 }
 
 function handleEvent(event) {
@@ -128,31 +311,30 @@ function handleEvent(event) {
     setActiveFlowStep("flow");
     window.clearTimeout(state.flowStepTimer);
     state.flowStepTimer = window.setTimeout(() => setActiveFlowStep("observe"), 400);
-    showCaptureToast("操作を検知しました。通信を待っています…");
+    showCaptureToast("操作を検知しました。対応するパケットを待っています…");
     return;
   }
 
   if (event.type === "action_correlated") {
     const label = event.label ?? state.lastActionLabel ?? "操作";
     setCurrentAction(`【${label}】ボタンが押されました`);
-    els.behindSrc.textContent = event.src ?? "—";
-    els.behindDst.textContent = event.dst ?? "—";
-    els.behindSummary.textContent = plainSummary(label, event.src, event.dst);
+    setBehindData({ ...event, label });
     state.highlightSrc = event.src;
     state.highlightUntil = performance.now() + 5000;
     window.clearTimeout(state.flowStepTimer);
     setActiveFlowStep("display");
     showCaptureToast(
-      "【通信を捕捉しました！】あなたの操作がネットワーク上に見つかりました。",
+      `【捕捉】${event.protocol ?? "TCP"} パケットとして ${formatEndpoint(event.src, event.src_port)} から届きました`,
     );
     pushFlowRow(event, true);
-    pulseWaterfallHighlight(event.protocol);
+    dropPacket(event, { highlight: true });
     window.setTimeout(() => setActiveFlowStep("button"), 5000);
     return;
   }
 
   if (event.type === "flow") {
     state.total += 1;
+    dropPacket(event);
     pushFlowRow(event, false);
     updateStats();
   }
@@ -161,8 +343,8 @@ function handleEvent(event) {
 function pushFlowRow(event, highlighted) {
   const row = {
     time: formatTime(),
-    src: event.src ?? "0.0.0.0",
-    dst: event.dst ?? "0.0.0.0",
+    src: formatEndpoint(event.src, event.src_port),
+    dst: formatEndpoint(event.dst, event.dst_port),
     protocol: event.protocol ?? "OTHER",
     highlighted,
   };
@@ -176,7 +358,7 @@ function renderFlowList() {
   if (state.flowRows.length === 0) {
     const empty = document.createElement("p");
     empty.className = "flow-list-empty";
-    empty.textContent = "通信が捕捉されるとここに表示されます";
+    empty.textContent = "捕捉したパケットがここに並びます";
     els.flowList.appendChild(empty);
     return;
   }
@@ -189,12 +371,17 @@ function renderFlowList() {
 
     const time = document.createElement("time");
     time.textContent = row.time;
+
+    const proto = document.createElement("span");
+    proto.className = `flow-row__proto ${protoBadgeClass(row.protocol)}`;
+    proto.textContent = row.protocol;
+
     const src = document.createElement("span");
     src.textContent = row.src;
     const dst = document.createElement("span");
     dst.textContent = row.dst;
 
-    el.append(time, src, dst);
+    el.append(time, proto, src, dst);
     els.flowList.appendChild(el);
   });
 }
@@ -208,59 +395,11 @@ function addAlert(event) {
   item.className = "alert-item";
   const target = event.dst ?? "不明";
   const rate = formatNumber(event.rate ?? 0);
-  item.textContent = `${target} 宛て ${rate} 件/秒 を超過`;
+  item.textContent = `${target} 宛て ${rate} パケット/秒 を超過`;
   els.alertLog.prepend(item);
   while (els.alertLog.children.length > 4) {
     els.alertLog.lastElementChild.remove();
   }
-}
-
-function protocolClass(protocol) {
-  switch (protocol) {
-    case "TCP":
-      return "waterfall-line--tcp";
-    case "UDP":
-      return "waterfall-line--udp";
-    case "ICMP":
-      return "waterfall-line--icmp";
-    default:
-      return "waterfall-line--other";
-  }
-}
-
-function setupWaterfall() {
-  els.waterfall.replaceChildren();
-  for (let i = 0; i < WATERFALL_LINES; i += 1) {
-    const line = document.createElement("div");
-    const protocols = ["TCP", "UDP", "ICMP", "OTHER"];
-    const protocol = protocols[Math.floor(Math.random() * protocols.length)];
-    line.className = `waterfall-line ${protocolClass(protocol)}`;
-    line.style.left = `${(i / WATERFALL_LINES) * 100 + (Math.random() * 2 - 1)}%`;
-    line.style.height = `${Math.random() * 60 + 20}px`;
-    line.style.animationDuration = `${Math.random() * 2 + 1.5}s`;
-    line.style.animationDelay = `${Math.random() * 3}s`;
-    line.dataset.protocol = protocol;
-    els.waterfall.appendChild(line);
-  }
-}
-
-function pulseWaterfallHighlight(protocol) {
-  const lines = els.waterfall.querySelectorAll(".waterfall-line");
-  const target = lines[Math.floor(Math.random() * lines.length)];
-  if (!target) {
-    return;
-  }
-  target.classList.remove(
-    "waterfall-line--tcp",
-    "waterfall-line--udp",
-    "waterfall-line--icmp",
-    "waterfall-line--other",
-  );
-  target.classList.add("waterfall-line--hit", protocolClass(protocol ?? "TCP"));
-  window.setTimeout(() => {
-    target.classList.remove("waterfall-line--hit");
-    target.classList.add(protocolClass(target.dataset.protocol ?? "OTHER"));
-  }, 2000);
 }
 
 function randomIp() {
@@ -277,7 +416,7 @@ function emitDemoFlow() {
       src: randomIp(),
       src_port: 1024 + Math.floor(Math.random() * 50000),
       dst: "192.168.1.10",
-      dst_port: [80, 443, 8080][Math.floor(Math.random() * 3)],
+      dst_port: [80, 443, 8080, 53][Math.floor(Math.random() * 4)],
     });
   }
   const baseline = 40 + Math.floor(Math.random() * 180);
@@ -377,7 +516,6 @@ async function connectStream() {
 
 window.addEventListener("DOMContentLoaded", () => {
   cacheElements();
-  setupWaterfall();
   updateStats();
   renderFlowList();
   setCurrentAction("ボタンを押すとここに表示されます", false);
