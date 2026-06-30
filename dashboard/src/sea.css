@@ -108,12 +108,13 @@ body {
 .journey {
   position: relative;
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) 150px;
-  gap: 18px;
-  min-height: 0;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(400px, 1.8fr) minmax(220px, 0.8fr);
+  gap: clamp(18px, 2vw, 34px);
+  align-items: center;
+  min-height: 380px;
   height: 100%;
   margin: 4px 0 0;
-  padding: 18px;
+  padding: clamp(22px, 2.4vw, 38px);
   overflow: hidden;
   border: 1px solid rgba(120, 157, 153, 0.18);
   border-radius: 24px;
@@ -127,7 +128,7 @@ body {
   right: 0;
   bottom: 0;
   left: 0;
-  height: 48%;
+  height: 36%;
   background:
     repeating-radial-gradient(ellipse at 50% 100%, rgba(120, 157, 153, 0.16) 0 2px, transparent 2px 18px),
     linear-gradient(180deg, rgba(35, 83, 96, 0.12), rgba(35, 83, 96, 0.42));
@@ -138,7 +139,7 @@ body {
 .journey::after {
   position: absolute;
   right: 11%;
-  bottom: 24%;
+  bottom: 18%;
   left: 11%;
   height: 2px;
   background: linear-gradient(90deg, rgba(231,229,223,0.08), rgba(231,229,223,0.58), rgba(231,229,223,0.08));
@@ -148,31 +149,32 @@ body {
 .journey-step {
   position: relative;
   z-index: 2;
-  min-height: auto;
-  padding: 16px;
+  width: 100%;
+  min-width: 0;
+  min-height: 240px;
+  padding: 22px 22px 78px;
+  overflow: hidden;
   border-radius: 18px;
   background: rgba(17, 22, 27, 0.72);
   backdrop-filter: blur(8px);
 }
 
 .journey-step--action {
-  align-self: end;
-  min-height: 168px;
+  align-self: center;
 }
 
 .journey-step--network {
   grid-column: 2;
   align-self: center;
-  justify-self: center;
-  width: min(520px, 100%);
-  min-height: 180px;
+  width: 100%;
+  min-height: 280px;
+  padding-bottom: 112px;
   border-color: rgba(120, 157, 153, 0.5);
 }
 
 .journey-step--capture {
   grid-column: 3;
-  align-self: end;
-  min-height: 168px;
+  align-self: center;
 }
 
 .journey-step--action::after {
@@ -187,7 +189,7 @@ body {
 .journey-step--network::before {
   position: absolute;
   left: 50%;
-  bottom: -28px;
+  bottom: 8px;
   z-index: 5;
   font-size: clamp(54px, 8vw, 96px);
   content: "⛵";
@@ -199,7 +201,7 @@ body {
 .journey-step--network::after {
   position: absolute;
   left: calc(50% - 20px);
-  bottom: 52px;
+  bottom: 88px;
   z-index: 6;
   padding: 5px 8px;
   border: 1px solid rgba(231,229,223,0.4);
@@ -222,6 +224,14 @@ body {
   opacity: 0.88;
 }
 
+.journey-step .packet-latest__body,
+.journey-step .current-action,
+.journey-step .capture-stage-copy {
+  position: relative;
+  z-index: 7;
+  overflow-wrap: anywhere;
+}
+
 @keyframes ship-sail {
   0%, 100% { transform: translateX(calc(-50% - 26px)) translateY(2px) rotate(-2deg); }
   50% { transform: translateX(calc(-50% + 26px)) translateY(-4px) rotate(2deg); }
@@ -238,6 +248,25 @@ body {
 
 .main-canvas[data-screen="sea"] .discovery-panel {
   display: none;
+}
+
+body[data-screen="result"] {
+  overflow: auto;
+}
+
+.main-canvas[data-screen="result"] {
+  height: auto;
+  min-height: calc(100vh - 58px);
+  grid-template-rows: auto auto;
+  overflow: visible;
+}
+
+.main-canvas[data-screen="result"] .story-panel {
+  grid-template-rows: auto auto;
+}
+
+.main-canvas[data-screen="result"] .journey {
+  height: auto;
 }
 
 .main-canvas[data-screen="sea"] .story-header,
@@ -292,7 +321,7 @@ body {
   overflow: auto;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   html,
   body {
     overflow: auto;
@@ -307,6 +336,10 @@ body {
   .discovery-panel,
   .protocol-result {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .journey {
+    min-height: auto;
   }
 
   .journey-step--network,

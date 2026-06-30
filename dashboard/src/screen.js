@@ -2,6 +2,7 @@ function setScreen(screen) {
   const main = document.querySelector("#main-canvas");
   if (!main) return;
   main.dataset.screen = screen;
+  document.body.dataset.screen = screen;
 }
 
 function inferScreenFromLayer(layer) {
