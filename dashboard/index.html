@@ -1,109 +1,116 @@
 <!doctype html>
-<html lang="ja">
+<html class="dark" lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>XDP Packet Observatory</title>
+    <title>通信観測ディスプレイ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.js" defer></script>
   </head>
   <body>
-    <main class="dashboard">
-      <div id="web-banner" class="web-banner" hidden>
-        <p>
-          GitHub Pages デモ版です。下のボタンで<strong>ラズパイの物理操作</strong>を再現し、
-          eBPF が捉えるパケットをシミュレートします。本番展示では実機のボタンとカーネル観測を接続します。
-        </p>
+    <div id="web-banner" class="web-banner" hidden>
+      <p>
+        デモ版です。下のボタンで操作を再現できます。本番展示では机のラズパイの実ボタンを使います。
+      </p>
+      <button id="simulate-button" class="simulate-button" type="button">
+        状態確認（デモ）
+      </button>
+    </div>
+
+    <nav class="top-nav">
+      <div class="top-nav__status">
+        <span id="stream-dot" class="status-dot waiting" aria-hidden="true"></span>
+        <span id="stream-status" class="top-nav__status-text">待機中</span>
       </div>
 
-      <header class="hero">
-        <div class="hero__copy">
-          <p class="eyebrow">eBPF / XDP パケット観測</p>
-          <h1>Packet Observatory</h1>
-          <p class="subtitle">
-            ボタン操作 → 実通信 → カーネルがパケットを捕捉、という流れを可視化します。
-          </p>
+      <div class="flow-map" aria-label="展示の流れ">
+        <div class="flow-map__step flow-map__step--active" data-step="button">
+          <span>ボタンを押す</span>
         </div>
-        <div class="status-strip">
-          <span id="stream-dot" class="status-dot waiting"></span>
-          <span id="stream-status">待機中</span>
-          <button id="demo-toggle" class="icon-button" type="button" aria-pressed="false" title="デモデータ">
-            デモ
-          </button>
+        <span class="flow-map__arrow" aria-hidden="true">›</span>
+        <div class="flow-map__step" data-step="flow">
+          <span>通信が流れる</span>
         </div>
-      </header>
+        <span class="flow-map__arrow" aria-hidden="true">›</span>
+        <div class="flow-map__step" data-step="observe">
+          <span>裏側で観察</span>
+        </div>
+        <span class="flow-map__arrow" aria-hidden="true">›</span>
+        <div class="flow-map__step" data-step="display">
+          <span>画面に表示</span>
+        </div>
+      </div>
 
-      <section id="booth-panel" class="booth-panel" hidden>
-        <div class="booth-panel__diagram" aria-hidden="true">
-          <span class="booth-step">ラズパイ<br />ボタン</span>
-          <span class="booth-arrow">→</span>
-          <span class="booth-step">HTTP<br />通信</span>
-          <span class="booth-arrow">→</span>
-          <span class="booth-step booth-step--core">eBPF<br />XDP</span>
-          <span class="booth-arrow">→</span>
-          <span class="booth-step">パケット<br />滝</span>
+      <button
+        id="demo-toggle"
+        class="demo-toggle"
+        type="button"
+        aria-pressed="false"
+        title="デモデータ"
+      >
+        デモ
+      </button>
+    </nav>
+
+    <main class="main-canvas">
+      <section class="panel panel--left">
+        <div class="metrics-header">
+          <div>
+            <h2 class="panel-label">現在の通信速度</h2>
+            <div id="pps-value" class="pps-value">0</div>
+          </div>
+          <div class="metrics-total">
+            <h3 class="panel-sublabel">累計通信数</h3>
+            <div id="total-value" class="total-value">0</div>
+          </div>
         </div>
-        <div class="booth-panel__control">
-          <p class="eyebrow">展示ブース（デモ）</p>
-          <button id="simulate-button" class="booth-button" type="button">
-            状態確認
-          </button>
-          <p class="booth-panel__hint">
-            技育博ではラズパイの実ボタンを押します。ここでは同じ操作をシミュレートします。
-          </p>
-        </div>
+        <div id="waterfall-container" class="waterfall" aria-label="通信の流れ"></div>
       </section>
 
-      <section class="metrics-grid">
-        <article class="meter-panel">
-          <div class="panel-heading">
-            <span>Packets Per Second</span>
-            <strong id="pps-value">0</strong>
-          </div>
-          <canvas id="pps-meter" aria-label="PPS メーター"></canvas>
-        </article>
-        <article class="stats-panel">
-          <div class="stat">
-            <span>累計</span>
-            <strong id="total-value">0</strong>
-          </div>
-          <div class="stat">
-            <span>直近プロトコル</span>
-            <strong id="protocol-value">—</strong>
-          </div>
-          <div class="stat">
-            <span>アラート</span>
-            <strong id="alert-count">0</strong>
-          </div>
-        </article>
-      </section>
+      <section class="panel panel--right">
+        <h2 class="panel-title">通信キャプチャ詳細</h2>
 
-      <section class="visual-grid">
-        <article class="waterfall-panel">
-          <div class="panel-heading">
-            <span>パケット滝</span>
-            <strong id="flow-count">0 件</strong>
-          </div>
-          <canvas id="waterfall" aria-label="フロー時系列"></canvas>
-        </article>
+        <div class="detail-card">
+          <h3 class="panel-sublabel">いま行われた操作</h3>
+          <p id="current-action" class="current-action">ボタンを押すとここに表示されます</p>
+        </div>
 
-        <aside class="side-panel">
-          <div class="panel-heading">
-            <span>直近フロー</span>
+        <div class="detail-card">
+          <h3 class="panel-sublabel">裏側で見えたデータ</h3>
+          <div class="ip-pair">
+            <span id="behind-src">—</span>
+            <span class="ip-pair__arrow" aria-hidden="true">→</span>
+            <span id="behind-dst">—</span>
           </div>
+          <p id="behind-summary" class="behind-summary">
+            操作に対応する通信がここに表示されます。
+          </p>
+        </div>
+
+        <div class="flow-list-wrap">
           <div id="flow-list" class="flow-list"></div>
-          <div class="panel-heading panel-heading--sub">
-            <span>レートアラート</span>
-          </div>
-          <div id="alert-log" class="alert-log"></div>
-        </aside>
-      </section>
+        </div>
 
-      <div id="action-toast" class="action-toast" hidden>
-        <p class="action-toast__label" id="toast-label">ボタン操作</p>
-        <p class="action-toast__detail" id="toast-detail"></p>
-      </div>
-      <div id="attack-flash" class="attack-flash" aria-hidden="true"></div>
+        <div class="alert-wrap">
+          <h3 class="panel-sublabel">レートアラート</h3>
+          <div id="alert-log" class="alert-log"></div>
+        </div>
+      </section>
     </main>
+
+    <div id="capture-toast" class="capture-toast" hidden>
+      <span class="capture-toast__icon" aria-hidden="true">✓</span>
+      <p id="capture-toast-text" class="capture-toast__text">
+        【通信を捕捉しました！】あなたの操作がネットワーク上に見つかりました。
+      </p>
+    </div>
+
+    <div id="attack-flash" class="attack-flash" aria-hidden="true"></div>
   </body>
 </html>

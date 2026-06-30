@@ -2,33 +2,26 @@ import { subscribeStream, isWebDemo } from "./stream.js";
 
 const STATUS_LABELS = {
   waiting: "待機中",
-  connected: "接続中",
-  disconnected: "切断",
-  demo: "デモ",
+  connected: "システム稼働中（通信を観測しています）",
+  disconnected: "接続が切断されました",
+  demo: "デモ（サンプルデータ）",
 };
 
 const DEMO_PI_IP = "192.168.1.50";
+const WATERFALL_LINES = 60;
 
 const state = {
   pps: 0,
   total: 0,
   alerts: 0,
-  flows: [],
   flowRows: [],
   status: "waiting",
   demo: false,
   webDemo: false,
   demoTimer: null,
-  lastProtocol: "—",
   highlightUntil: 0,
   highlightSrc: null,
-};
-
-const protocolColors = {
-  TCP: "#3ecf8e",
-  UDP: "#4cc9f0",
-  ICMP: "#f4a261",
-  OTHER: "#94a3b8",
+  lastActionLabel: null,
 };
 
 const els = {};
@@ -38,21 +31,20 @@ function cacheElements() {
   els.statusDot = document.querySelector("#stream-dot");
   els.demoToggle = document.querySelector("#demo-toggle");
   els.webBanner = document.querySelector("#web-banner");
-  els.boothPanel = document.querySelector("#booth-panel");
   els.simulateButton = document.querySelector("#simulate-button");
   els.ppsValue = document.querySelector("#pps-value");
   els.totalValue = document.querySelector("#total-value");
-  els.protocolValue = document.querySelector("#protocol-value");
-  els.alertCount = document.querySelector("#alert-count");
-  els.flowCount = document.querySelector("#flow-count");
-  els.alertLog = document.querySelector("#alert-log");
+  els.waterfall = document.querySelector("#waterfall-container");
   els.flowList = document.querySelector("#flow-list");
+  els.alertLog = document.querySelector("#alert-log");
   els.flash = document.querySelector("#attack-flash");
-  els.meter = document.querySelector("#pps-meter");
-  els.waterfall = document.querySelector("#waterfall");
-  els.toast = document.querySelector("#action-toast");
-  els.toastLabel = document.querySelector("#toast-label");
-  els.toastDetail = document.querySelector("#toast-detail");
+  els.currentAction = document.querySelector("#current-action");
+  els.behindSrc = document.querySelector("#behind-src");
+  els.behindDst = document.querySelector("#behind-dst");
+  els.behindSummary = document.querySelector("#behind-summary");
+  els.captureToast = document.querySelector("#capture-toast");
+  els.captureToastText = document.querySelector("#capture-toast-text");
+  els.flowSteps = document.querySelectorAll(".flow-map__step");
 }
 
 function setStatus(status) {
@@ -66,18 +58,38 @@ function formatNumber(value) {
   return new Intl.NumberFormat("ja-JP").format(value);
 }
 
-function showActionToast(label, detail) {
-  els.toastLabel.textContent = label;
-  els.toastDetail.textContent = detail;
-  els.toast.hidden = false;
-  els.toast.classList.add("visible");
-  window.clearTimeout(showActionToast.timer);
-  showActionToast.timer = window.setTimeout(() => {
-    els.toast.classList.remove("visible");
+function formatTime(date = new Date()) {
+  return date.toLocaleTimeString("ja-JP", { hour12: false });
+}
+
+function setActiveFlowStep(step) {
+  els.flowSteps.forEach((el) => {
+    el.classList.toggle("flow-map__step--active", el.dataset.step === step);
+  });
+}
+
+function showCaptureToast(message) {
+  els.captureToastText.textContent = message;
+  els.captureToast.hidden = false;
+  els.captureToast.classList.remove("visible");
+  void els.captureToast.offsetWidth;
+  els.captureToast.classList.add("visible");
+  window.clearTimeout(showCaptureToast.timer);
+  showCaptureToast.timer = window.setTimeout(() => {
+    els.captureToast.classList.remove("visible");
     window.setTimeout(() => {
-      els.toast.hidden = true;
-    }, 280);
-  }, 4200);
+      els.captureToast.hidden = true;
+    }, 300);
+  }, 4000);
+}
+
+function plainSummary(label) {
+  return `「${label}」という操作が、ネットワーク上では送信元と宛先の間の通信として見えます。`;
+}
+
+function updateStats() {
+  els.ppsValue.textContent = formatNumber(state.pps);
+  els.totalValue.textContent = formatNumber(state.total);
 }
 
 function handleEvent(event) {
@@ -91,69 +103,66 @@ function handleEvent(event) {
   if (event.type === "alert") {
     state.alerts += 1;
     addAlert(event);
-    updateStats();
     return;
   }
 
   if (event.type === "physical_action") {
-    showActionToast(
-      event.label ?? "物理操作",
-      `${event.node_id ?? "node"} — パケット待ち…`,
-    );
+    state.lastActionLabel = event.label ?? "操作";
+    els.currentAction.textContent = `【${state.lastActionLabel}】ボタンが押されました`;
+    setActiveFlowStep("flow");
+    showCaptureToast("操作を検知しました。通信を待っています…");
     return;
   }
 
   if (event.type === "action_correlated") {
-    const detail = `${event.protocol} ${event.src}:${event.src_port} → ${event.dst}:${event.dst_port}`;
-    showActionToast(`「${event.label}」を捕捉`, detail);
+    const label = event.label ?? state.lastActionLabel ?? "操作";
+    els.currentAction.textContent = `【${label}】ボタンが押されました`;
+    els.behindSrc.textContent = event.src ?? "—";
+    els.behindDst.textContent = event.dst ?? "—";
+    els.behindSummary.textContent = plainSummary(label);
     state.highlightSrc = event.src;
     state.highlightUntil = performance.now() + 5000;
-    pushFlow(event, true);
-    updateStats();
-    renderFlowList();
+    setActiveFlowStep("display");
+    showCaptureToast(
+      "【通信を捕捉しました！】あなたの操作がネットワーク上に見つかりました。",
+    );
+    pushFlowRow(event, true);
+    pulseWaterfallHighlight(event.protocol);
+    window.setTimeout(() => setActiveFlowStep("button"), 5000);
     return;
   }
 
   if (event.type === "flow") {
     state.total += 1;
-    state.lastProtocol = event.protocol ?? "OTHER";
-    pushFlow(event, false);
+    pushFlowRow(event, false);
     updateStats();
-    renderFlowList();
   }
 }
 
-function pushFlow(event, highlighted) {
-  const entry = {
-    protocol: event.protocol ?? "OTHER",
+function pushFlowRow(event, highlighted) {
+  const row = {
+    time: formatTime(),
     src: event.src ?? "0.0.0.0",
     dst: event.dst ?? "0.0.0.0",
-    srcPort: event.src_port ?? 0,
-    dstPort: event.dst_port ?? 0,
-    at: performance.now(),
+    protocol: event.protocol ?? "OTHER",
     highlighted,
   };
-  state.flows.push(entry);
-  state.flows = state.flows.slice(-160);
-  state.flowRows.unshift(entry);
-  state.flowRows = state.flowRows.slice(0, 12);
-}
-
-function updateStats() {
-  els.ppsValue.textContent = formatNumber(state.pps);
-  els.totalValue.textContent = formatNumber(state.total);
-  els.protocolValue.textContent = state.lastProtocol;
-  els.alertCount.textContent = formatNumber(state.alerts);
-  els.flowCount.textContent = `${formatNumber(state.flows.length)} 件`;
+  state.flowRows.unshift(row);
+  state.flowRows = state.flowRows.slice(0, 8);
+  renderFlowList();
 }
 
 function renderFlowList() {
   els.flowList.replaceChildren();
-  state.flowRows.forEach((flow) => {
-    const row = document.createElement("div");
-    row.className = `flow-item${flow.highlighted ? " flow-item--hit" : ""}`;
-    row.innerHTML = `<strong>${flow.protocol}</strong><span>${flow.src}:${flow.srcPort} → ${flow.dst}:${flow.dstPort}</span>`;
-    els.flowList.appendChild(row);
+  state.flowRows.forEach((row) => {
+    const el = document.createElement("div");
+    el.className = `flow-row${row.highlighted ? " flow-row--hit" : ""}`;
+    el.innerHTML = `
+      <time>${row.time}</time>
+      <span>${row.src}</span>
+      <span>${row.dst}</span>
+    `;
+    els.flowList.appendChild(el);
   });
 }
 
@@ -166,123 +175,59 @@ function addAlert(event) {
   item.className = "alert-item";
   const target = event.dst ?? "不明";
   const rate = formatNumber(event.rate ?? 0);
-  item.innerHTML = `<strong>${target}</strong><span>${rate} pps 超過</span>`;
+  item.textContent = `${target} 宛て ${rate} 件/秒 を超過`;
   els.alertLog.prepend(item);
-  while (els.alertLog.children.length > 6) {
+  while (els.alertLog.children.length > 4) {
     els.alertLog.lastElementChild.remove();
   }
 }
 
-function fitCanvasToDisplay(canvas) {
-  const rect = canvas.getBoundingClientRect();
-  const width = Math.max(1, Math.round(rect.width));
-  const height = Math.max(1, Math.round(rect.height));
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
+function protocolClass(protocol) {
+  switch (protocol) {
+    case "TCP":
+      return "waterfall-line--tcp";
+    case "UDP":
+      return "waterfall-line--udp";
+    case "ICMP":
+      return "waterfall-line--icmp";
+    default:
+      return "waterfall-line--other";
   }
 }
 
-function setupCanvasSizing() {
-  const resize = () => {
-    fitCanvasToDisplay(els.meter);
-    fitCanvasToDisplay(els.waterfall);
-  };
-  resize();
-  const observer = new ResizeObserver(resize);
-  observer.observe(els.meter);
-  observer.observe(els.waterfall);
+function setupWaterfall() {
+  els.waterfall.replaceChildren();
+  for (let i = 0; i < WATERFALL_LINES; i += 1) {
+    const line = document.createElement("div");
+    const protocols = ["TCP", "UDP", "ICMP", "OTHER"];
+    const protocol = protocols[Math.floor(Math.random() * protocols.length)];
+    line.className = `waterfall-line ${protocolClass(protocol)}`;
+    line.style.left = `${(i / WATERFALL_LINES) * 100 + (Math.random() * 2 - 1)}%`;
+    line.style.height = `${Math.random() * 60 + 20}px`;
+    line.style.animationDuration = `${Math.random() * 2 + 1.5}s`;
+    line.style.animationDelay = `${Math.random() * 3}s`;
+    line.dataset.protocol = protocol;
+    els.waterfall.appendChild(line);
+  }
 }
 
-function drawMeter() {
-  const canvas = els.meter;
-  const ctx = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
-  const cx = width / 2;
-  const cy = height * 0.82;
-  const radius = Math.min(width * 0.42, height * 0.74);
-  const maxPps = 1000;
-  const ratio = Math.min(state.pps / maxPps, 1);
-  const start = Math.PI;
-  const end = Math.PI * 2;
-  const angle = start + ratio * Math.PI;
-
-  ctx.clearRect(0, 0, width, height);
-  ctx.lineCap = "round";
-  ctx.lineWidth = Math.max(10, Math.round(height * 0.08));
-
-  ctx.beginPath();
-  ctx.strokeStyle = "#1e293b";
-  ctx.arc(cx, cy, radius, start, end);
-  ctx.stroke();
-
-  const gradient = ctx.createLinearGradient(cx - radius, cy, cx + radius, cy);
-  gradient.addColorStop(0, "#3ecf8e");
-  gradient.addColorStop(0.55, "#4cc9f0");
-  gradient.addColorStop(1, "#ef4444");
-
-  ctx.beginPath();
-  ctx.strokeStyle = gradient;
-  ctx.arc(cx, cy, radius, start, angle);
-  ctx.stroke();
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(radius - 20, 0);
-  ctx.strokeStyle = "#f8fafc";
-  ctx.lineWidth = 4;
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawWaterfall() {
-  const canvas = els.waterfall;
-  const ctx = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
-  const now = performance.now();
-  const highlightActive = now < state.highlightUntil;
-
-  ctx.fillStyle = "rgba(8, 12, 20, 0.42)";
-  ctx.fillRect(0, 0, width, height);
-
-  state.flows.forEach((flow, index) => {
-    const age = Math.min((now - flow.at) / 6000, 1);
-    const x = (index / 160) * width;
-    const y = age * height;
-    const length = 18 + (flow.dstPort % 46);
-    const color = protocolColors[flow.protocol] ?? protocolColors.OTHER;
-    const isHit =
-      flow.highlighted ||
-      (highlightActive && flow.src === state.highlightSrc && age < 0.2);
-
-    ctx.globalAlpha = 1 - age * 0.75;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = isHit ? 3.6 : flow.protocol === "TCP" ? 2.2 : 1.6;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + length, y + 16);
-    ctx.stroke();
-
-    if (isHit) {
-      ctx.globalAlpha = 0.85;
-      ctx.strokeStyle = "#fde047";
-      ctx.lineWidth = 1.2;
-      ctx.strokeRect(x - 2, y - 2, length + 8, 22);
-    }
-  });
-
-  ctx.globalAlpha = 1;
-}
-
-function animate() {
-  drawMeter();
-  drawWaterfall();
-  requestAnimationFrame(animate);
+function pulseWaterfallHighlight(protocol) {
+  const lines = els.waterfall.querySelectorAll(".waterfall-line");
+  const target = lines[Math.floor(Math.random() * lines.length)];
+  if (!target) {
+    return;
+  }
+  target.classList.remove(
+    "waterfall-line--tcp",
+    "waterfall-line--udp",
+    "waterfall-line--icmp",
+    "waterfall-line--other",
+  );
+  target.classList.add("waterfall-line--hit", protocolClass(protocol ?? "TCP"));
+  window.setTimeout(() => {
+    target.classList.remove("waterfall-line--hit");
+    target.classList.add(protocolClass(target.dataset.protocol ?? "OTHER"));
+  }, 2000);
 }
 
 function randomIp() {
@@ -291,7 +236,7 @@ function randomIp() {
 
 function emitDemoFlow() {
   const protocols = ["TCP", "UDP", "ICMP"];
-  const burst = 3 + Math.floor(Math.random() * 8);
+  const burst = 2 + Math.floor(Math.random() * 4);
   for (let i = 0; i < burst; i += 1) {
     handleEvent({
       type: "flow",
@@ -303,20 +248,20 @@ function emitDemoFlow() {
     });
   }
   const baseline = 60 + Math.floor(Math.random() * 220);
-  state.pps = Math.random() > 0.88 ? baseline + 700 : baseline;
-  if (state.pps > 650) {
+  state.pps = Math.random() > 0.88 ? baseline + 200 : baseline;
+  state.total = Math.max(state.total, 12480) + burst;
+  if (state.pps > 400) {
     handleEvent({ type: "alert", dst: "192.168.1.10", rate: state.pps });
   }
   updateStats();
 }
 
 function emitSimulatedButtonPress() {
-  const srcPort = 52000 + Math.floor(Math.random() * 800);
   handleEvent({
     type: "physical_action",
     node_id: "booth-pi-1",
     action: "check_status",
-    label: "状態確認ボタン",
+    label: "状態確認",
     src_ip: DEMO_PI_IP,
   });
   window.setTimeout(() => {
@@ -324,14 +269,14 @@ function emitSimulatedButtonPress() {
       type: "action_correlated",
       node_id: "booth-pi-1",
       action: "check_status",
-      label: "状態確認ボタン",
+      label: "状態確認",
       protocol: "TCP",
       src: DEMO_PI_IP,
-      src_port: srcPort,
+      src_port: 52000 + Math.floor(Math.random() * 800),
       dst: "192.168.1.10",
       dst_port: 8080,
     });
-  }, 180);
+  }, 200);
 }
 
 function startBackgroundDemo() {
@@ -342,7 +287,10 @@ function startBackgroundDemo() {
   els.demoToggle.setAttribute("aria-pressed", "true");
   els.demoToggle.classList.add("active");
   setStatus("demo");
-  state.demoTimer = window.setInterval(emitDemoFlow, 2000);
+  state.pps = 342;
+  state.total = 12480;
+  updateStats();
+  state.demoTimer = window.setInterval(emitDemoFlow, 2200);
 }
 
 function stopBackgroundDemo() {
@@ -365,7 +313,6 @@ function toggleDemo() {
 function setupWebDemo() {
   state.webDemo = true;
   els.webBanner.hidden = false;
-  els.boothPanel.hidden = false;
   els.demoToggle.hidden = true;
   startBackgroundDemo();
   els.simulateButton.addEventListener("click", () => {
@@ -373,7 +320,7 @@ function setupWebDemo() {
     emitSimulatedButtonPress();
     window.setTimeout(() => {
       els.simulateButton.disabled = false;
-    }, 600);
+    }, 800);
   });
 }
 
@@ -399,10 +346,10 @@ async function connectStream() {
 
 window.addEventListener("DOMContentLoaded", () => {
   cacheElements();
+  setupWaterfall();
   updateStats();
   setStatus("waiting");
+  setActiveFlowStep("button");
   els.demoToggle.addEventListener("click", toggleDemo);
-  setupCanvasSizing();
   connectStream();
-  animate();
 });
