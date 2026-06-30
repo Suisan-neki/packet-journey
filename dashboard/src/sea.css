@@ -1,0 +1,322 @@
+html,
+body {
+  overflow: hidden;
+}
+
+.top-nav {
+  height: 58px;
+}
+
+.main-canvas {
+  width: 100vw;
+  max-width: none;
+  height: calc(100vh - 58px);
+  min-height: 0;
+  margin: 0;
+  padding: 12px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.story-panel,
+.discovery-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.story-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: clamp(18px, 2vw, 28px);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(120, 157, 153, 0.22), transparent 28%),
+    linear-gradient(180deg, #1b2026 0%, #171b20 42%, #11181f 100%);
+}
+
+.story-header h1 {
+  font-size: clamp(30px, 4vw, 54px);
+  line-height: 1.18;
+}
+
+.story-lead {
+  max-width: 680px;
+  margin-top: 12px;
+  font-size: clamp(13px, 1.2vw, 16px);
+  line-height: 1.75;
+}
+
+.start-action {
+  min-height: auto;
+  margin: 6px 0 0;
+}
+
+.simulate-button,
+.physical-prompt {
+  min-width: min(360px, 100%);
+  width: fit-content;
+  padding: 16px 22px;
+  border: 1px solid rgba(120, 157, 153, 0.55);
+  border-radius: 999px;
+  background: rgba(231, 229, 223, 0.92);
+  color: #101418;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+}
+
+.physical-prompt {
+  cursor: pointer;
+}
+
+.simulate-button span,
+.physical-prompt strong {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.simulate-button small,
+.physical-prompt small {
+  color: rgba(16, 20, 24, 0.7);
+  font-size: 12px;
+}
+
+.main-canvas[data-screen="intro"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.main-canvas[data-screen="intro"] .story-panel {
+  place-content: center;
+  gap: 20px;
+}
+
+.main-canvas[data-screen="intro"] .story-header,
+.main-canvas[data-screen="intro"] .start-action {
+  width: min(900px, 100%);
+  margin-inline: auto;
+}
+
+.main-canvas[data-screen="intro"] .journey,
+.main-canvas[data-screen="intro"] .layer-narration,
+.main-canvas[data-screen="intro"] .live-stream,
+.main-canvas[data-screen="intro"] .discovery-panel {
+  display: none;
+}
+
+.journey {
+  position: relative;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 150px;
+  gap: 18px;
+  min-height: 0;
+  height: 100%;
+  margin: 4px 0 0;
+  padding: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(120, 157, 153, 0.18);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(26, 34, 42, 0.95), rgba(9, 24, 34, 0.96)),
+    radial-gradient(circle at 50% 70%, rgba(120, 157, 153, 0.16), transparent 40%);
+}
+
+.journey::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 48%;
+  background:
+    repeating-radial-gradient(ellipse at 50% 100%, rgba(120, 157, 153, 0.16) 0 2px, transparent 2px 18px),
+    linear-gradient(180deg, rgba(35, 83, 96, 0.12), rgba(35, 83, 96, 0.42));
+  content: "";
+  opacity: 0.9;
+}
+
+.journey::after {
+  position: absolute;
+  right: 11%;
+  bottom: 24%;
+  left: 11%;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(231,229,223,0.08), rgba(231,229,223,0.58), rgba(231,229,223,0.08));
+  content: "";
+}
+
+.journey-step {
+  position: relative;
+  z-index: 2;
+  min-height: auto;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(17, 22, 27, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.journey-step--action {
+  align-self: end;
+  min-height: 168px;
+}
+
+.journey-step--network {
+  grid-column: 2;
+  align-self: center;
+  justify-self: center;
+  width: min(520px, 100%);
+  min-height: 180px;
+  border-color: rgba(120, 157, 153, 0.5);
+}
+
+.journey-step--capture {
+  grid-column: 3;
+  align-self: end;
+  min-height: 168px;
+}
+
+.journey-step--action::after {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  font-size: 42px;
+  content: "🏝️";
+  opacity: 0.88;
+}
+
+.journey-step--network::before {
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  z-index: 5;
+  font-size: clamp(54px, 8vw, 96px);
+  content: "⛵";
+  transform: translateX(-50%);
+  filter: drop-shadow(0 16px 22px rgba(0,0,0,0.42));
+  animation: ship-sail 5.4s ease-in-out infinite;
+}
+
+.journey-step--network::after {
+  position: absolute;
+  left: calc(50% - 20px);
+  bottom: 52px;
+  z-index: 6;
+  padding: 5px 8px;
+  border: 1px solid rgba(231,229,223,0.4);
+  border-radius: 8px;
+  background: rgba(169, 142, 112, 0.92);
+  color: #17191c;
+  font-size: 11px;
+  font-weight: 900;
+  content: "荷物";
+  transform: translateX(-50%);
+  animation: cargo-bob 2s ease-in-out infinite;
+}
+
+.journey-step--capture::after {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  font-size: 42px;
+  content: "⚓";
+  opacity: 0.88;
+}
+
+@keyframes ship-sail {
+  0%, 100% { transform: translateX(calc(-50% - 26px)) translateY(2px) rotate(-2deg); }
+  50% { transform: translateX(calc(-50% + 26px)) translateY(-4px) rotate(2deg); }
+}
+
+@keyframes cargo-bob {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-5px); }
+}
+
+.journey-link {
+  display: none;
+}
+
+.main-canvas[data-screen="sea"] .discovery-panel {
+  display: none;
+}
+
+.main-canvas[data-screen="sea"] .story-header,
+.main-canvas[data-screen="result"] .story-header,
+.main-canvas[data-screen="sea"] .start-action,
+.main-canvas[data-screen="result"] .start-action {
+  display: none;
+}
+
+.live-stream {
+  display: none;
+}
+
+.discovery-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.discovery-card,
+.deep-dive {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.discovery-card {
+  padding: 18px 22px;
+}
+
+.discovery-card h2 {
+  font-size: clamp(28px, 3vw, 44px);
+}
+
+.protocol-result {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 0.65fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.behind-summary {
+  margin: 0;
+  padding: 0 0 0 16px;
+  border-top: 0;
+  border-left: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.deep-dive__body {
+  max-height: calc(100vh - 235px);
+  overflow: auto;
+}
+
+@media (max-width: 900px) {
+  html,
+  body {
+    overflow: auto;
+  }
+
+  .main-canvas {
+    height: auto;
+    overflow: visible;
+  }
+
+  .journey,
+  .discovery-panel,
+  .protocol-result {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .journey-step--network,
+  .journey-step--capture {
+    grid-column: auto;
+  }
+
+  .behind-summary {
+    padding: 14px 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+}
