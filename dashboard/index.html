@@ -2,13 +2,12 @@
 <html class="dark" lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Cache-Control" content="no-cache" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <title>通信観測ディスプレイ</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PACKET JOURNEY — 見えない通信をつかまえよう</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/src/styles.css" />
@@ -16,222 +15,201 @@
   </head>
   <body>
     <div id="web-banner" class="web-banner" hidden>
-      <p>
-        デモ版です。下のボタンで操作を再現できます。本番展示では机のラズパイの実ボタンを使います。
-      </p>
-      <button id="simulate-button" class="simulate-button" type="button">
-        状態確認（デモ）
-      </button>
+      <span>WEB DEMO</span>
+      <p>実物のボタンの代わりに、画面のボタンで通信を起こせます。</p>
     </div>
 
     <nav class="top-nav">
-      <div class="top-nav__status">
-        <span id="stream-dot" class="status-dot waiting" aria-hidden="true"></span>
-        <span id="stream-status" class="top-nav__status-text">待機中</span>
-      </div>
+      <a class="brand" href="#main-canvas" aria-label="Packet Journey トップ">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <span>PACKET JOURNEY</span>
+      </a>
 
-      <div class="flow-map" aria-label="OSI参照モデルに沿った視点の移動">
-        <div class="flow-map__step flow-map__step--active" data-step="l7">
-          <span class="flow-map__layer">L7</span>
-          <span>操作</span>
+      <div class="top-nav__live">
+        <div class="top-nav__status">
+          <span id="stream-dot" class="status-dot waiting" aria-hidden="true"></span>
+          <span id="stream-status" class="top-nav__status-text">待機中</span>
         </div>
-        <span class="flow-map__arrow flow-map__arrow--down" aria-hidden="true">↓</span>
-        <div class="flow-map__step" data-step="l4l3">
-          <span class="flow-map__layer">L4·L3</span>
-          <span>パケット</span>
+        <div class="nav-rate" aria-label="現在のパケット数">
+          <strong id="pps-value">0</strong>
+          <span>packets / sec</span>
         </div>
-        <span class="flow-map__arrow flow-map__arrow--down" aria-hidden="true">↓</span>
-        <div class="flow-map__step" data-step="l2">
-          <span class="flow-map__layer">L2</span>
-          <span>カーネル観測</span>
-        </div>
-        <span class="flow-map__arrow flow-map__arrow--up" aria-hidden="true">↑</span>
-        <div class="flow-map__step" data-step="linked">
-          <span>つながった</span>
-        </div>
+        <button id="demo-toggle" class="demo-toggle" type="button" aria-pressed="false">
+          デモ通信
+        </button>
       </div>
-
-      <button
-        id="demo-toggle"
-        class="demo-toggle"
-        type="button"
-        aria-pressed="false"
-        title="デモデータ"
-      >
-        デモ
-      </button>
     </nav>
 
-    <main class="main-canvas" id="main-canvas">
-      <aside class="osi-stack" id="osi-stack" aria-label="OSI参照モデル">
-        <header class="osi-stack__header">
-          <h2 class="osi-stack__title">OSI参照モデル</h2>
-          <p class="osi-stack__desc">通信を7つの層に分けて考える枠組み</p>
-        </header>
-        <ol class="osi-stack__layers">
-          <li class="osi-layer" data-osi="7">
-            <span class="osi-layer__num">7</span>
-            <span class="osi-layer__name">アプリケーション</span>
-            <span class="osi-layer__hint">ボタン・Web</span>
-          </li>
-          <li class="osi-layer osi-layer--dim" data-osi="6">
-            <span class="osi-layer__num">6</span>
-            <span class="osi-layer__name">プレゼンテーション</span>
-          </li>
-          <li class="osi-layer osi-layer--dim" data-osi="5">
-            <span class="osi-layer__num">5</span>
-            <span class="osi-layer__name">セッション</span>
-          </li>
-          <li class="osi-layer" data-osi="4">
-            <span class="osi-layer__num">4</span>
-            <span class="osi-layer__name">トランスポート</span>
-            <span class="osi-layer__hint">TCP / UDP</span>
-          </li>
-          <li class="osi-layer" data-osi="3">
-            <span class="osi-layer__num">3</span>
-            <span class="osi-layer__name">ネットワーク</span>
-            <span class="osi-layer__hint">IPアドレス</span>
-          </li>
-          <li class="osi-layer" data-osi="2">
-            <span class="osi-layer__num">2</span>
-            <span class="osi-layer__name">データリンク</span>
-            <span class="osi-layer__hint">XDPが観測</span>
-          </li>
-          <li class="osi-layer osi-layer--dim" data-osi="1">
-            <span class="osi-layer__num">1</span>
-            <span class="osi-layer__name">物理</span>
-          </li>
-        </ol>
-        <p id="osi-focus" class="osi-focus" aria-live="polite">いまの視点: L7（操作）</p>
-      </aside>
-
-      <section class="panel panel--left panel--low-layer">
-        <header class="panel-header">
-          <span class="layer-tag layer-tag--low">L2〜L4</span>
-          <h2 class="panel-title panel-title--inline">カーネルが見ている世界</h2>
-          <p class="panel-desc">
-            OSIの下位層（L2 データリンク〜L4 トランスポート）。eBPF / XDP がパケットを観測します
+    <main class="main-canvas" id="main-canvas" data-layer="l7">
+      <section class="story-panel" aria-labelledby="story-title">
+        <header class="story-header">
+          <p class="eyebrow">見えない世界を、のぞいてみよう。</p>
+          <h1 id="story-title">ボタンを押した、その瞬間。<br />通信は旅に出る。</h1>
+          <p class="story-lead">
+            いつもの操作の裏側では、小さなデータの荷物が生まれています。
+            今日はその旅を、カーネルの最前線まで追いかけます。
           </p>
         </header>
-        <div class="metrics-header">
-          <div>
-            <h2 class="panel-label">1秒あたりのパケット数</h2>
-            <div class="pps-row">
-              <div id="pps-value" class="pps-value">0</div>
-              <span class="pps-unit">パケット/秒</span>
-            </div>
-          </div>
-          <div class="metrics-total">
-            <h3 class="panel-sublabel">観測したパケット（累計）</h3>
-            <div id="total-value" class="total-value">0</div>
+
+        <div class="start-action">
+          <button id="simulate-button" class="simulate-button" type="button" hidden>
+            <span>通信を起こす</span>
+            <small>状態確認ボタンを押す</small>
+          </button>
+          <div id="physical-prompt" class="physical-prompt">
+            <span class="physical-prompt__pulse" aria-hidden="true"></span>
+            <span><strong>机のボタンを押してみて</strong><small>あなたの操作から通信の旅が始まります</small></span>
           </div>
         </div>
 
-        <div class="waterfall-intro">
-          <p>L2〜L4 のパケット。色はプロトコル（TCP <span class="osi-inline">L4</span> など）です。</p>
-          <ul class="waterfall-legend" aria-label="プロトコルとOSI層の対応">
-            <li class="waterfall-legend__item waterfall-legend__item--tcp">
-              <span class="waterfall-legend__dot"></span>
-              <span><strong>TCP</strong> <span class="osi-inline">L4</span> — データを正確かつ確実に届ける</span>
-            </li>
-            <li class="waterfall-legend__item waterfall-legend__item--udp">
-              <span class="waterfall-legend__dot"></span>
-              <span><strong>UDP</strong> <span class="osi-inline">L4</span> — 届いたかは問わず速く送る</span>
-            </li>
-            <li class="waterfall-legend__item waterfall-legend__item--icmp">
-              <span class="waterfall-legend__dot"></span>
-              <span><strong>ICMP</strong> <span class="osi-inline">L3</span> — 相手につながるか調べる</span>
-            </li>
-          </ul>
-        </div>
-
-        <div id="packet-latest" class="packet-latest packet-latest--idle" aria-live="polite">
-          パケットが流れると、いちばん新しい通信の種類と行き先がここに表示されます
-        </div>
-
-        <div id="waterfall-container" class="waterfall" aria-label="流れるパケット">
-          <p id="waterfall-idle" class="waterfall-idle">待機中…</p>
-        </div>
-      </section>
-
-      <section class="panel panel--right panel--high-layer">
-        <header class="panel-header panel-header--compact">
-          <span class="layer-tag layer-tag--high">L7</span>
-          <h2 class="panel-title panel-title--inline">あなたの操作</h2>
-          <p class="panel-desc">OSI L7 アプリケーション層。ボタンやアプリの世界です</p>
-        </header>
-
-        <div class="detail-card detail-card--high">
-          <h3 class="panel-sublabel">いま行われた操作</h3>
-          <p id="current-action" class="current-action current-action--idle">
-            ボタンを押すとここに表示されます
-          </p>
-        </div>
-
-        <div id="layer-bridge-card" class="layer-bridge-card" hidden>
-          <p class="layer-bridge-card__title">OSIの別の層で、同じ出来事が見えています</p>
-          <div class="layer-bridge-card__cols">
-            <div class="layer-bridge-card__col layer-bridge-card__col--high">
-              <span class="layer-tag layer-tag--high">L7</span>
-              <p id="bridge-high-text">—</p>
+        <div class="journey" aria-label="操作からXDP捕捉までの流れ">
+          <article class="journey-step journey-step--action" data-journey-step="l7">
+            <div class="journey-step__topline">
+              <span class="journey-step__number">1</span>
+              <span class="journey-step__layer">L7</span>
             </div>
-            <div class="layer-bridge-card__arrow" aria-hidden="true">⇅</div>
-            <div class="layer-bridge-card__col layer-bridge-card__col--low">
-              <span class="layer-tag layer-tag--low">L4·L3·L2</span>
-              <p id="bridge-low-text">—</p>
-            </div>
+            <p class="journey-step__verb">あなたが操作する</p>
+            <p id="current-action" class="current-action current-action--idle">
+              まだ何も押されていません
+            </p>
+          </article>
+
+          <div class="journey-link" aria-hidden="true">
+            <span class="journey-link__line"></span>
+            <span class="journey-link__packet">DATA</span>
           </div>
-        </div>
 
-        <div class="detail-card detail-card--low">
-          <h3 class="panel-sublabel">
-            <span class="layer-tag layer-tag--low layer-tag--inline">L4·L3</span>
-            裏側で見えたパケット
-          </h3>
-          <div id="behind-protocol" class="proto-badge proto-badge--idle">—</div>
-          <div class="ip-pair">
-            <div class="ip-endpoint">
-              <span id="behind-src">—</span>
-              <span id="behind-src-port" class="ip-port"></span>
+          <article class="journey-step journey-step--network" data-journey-step="network">
+            <div class="journey-step__topline">
+              <span class="journey-step__number">2</span>
+              <span class="journey-step__layer">L4 · L3</span>
             </div>
-            <span class="ip-pair__arrow" aria-hidden="true">→</span>
-            <div class="ip-endpoint">
-              <span id="behind-dst">—</span>
-              <span id="behind-dst-port" class="ip-port"></span>
+            <p class="journey-step__verb">パケットになって進む</p>
+            <div id="packet-latest" class="packet-latest packet-latest--idle" aria-live="polite">
+              通信が生まれると、ここに正体が現れます
             </div>
+          </article>
+
+          <div class="journey-link" aria-hidden="true">
+            <span class="journey-link__line"></span>
+            <span class="journey-link__packet">DATA</span>
           </div>
-          <p id="behind-summary" class="behind-summary">
-            操作に対応するパケットが、低レイヤで捕捉されるとここに表示されます。
-          </p>
+
+          <article class="journey-step journey-step--capture" data-journey-step="l2">
+            <div class="journey-step__topline">
+              <span class="journey-step__number">3</span>
+              <span class="journey-step__layer">L2</span>
+            </div>
+            <p id="capture-stage-title" class="journey-step__verb">XDPが待ち構える</p>
+            <p id="capture-stage-copy" class="capture-stage-copy">
+              カーネルの入口で、すべてのパケットを見ています
+            </p>
+            <span class="xdp-radar" aria-hidden="true"><i></i></span>
+          </article>
         </div>
 
         <p id="layer-narration" class="layer-narration" aria-live="polite">
-          ボタンを押すと、OSIの L7 から L2 へ視点が下がり、同じ通信を別の層で見ます
+          ボタンを押すと、同じ出来事を通信の奥深くまで追いかけます
         </p>
 
-        <div class="flow-list-wrap">
-          <div class="flow-list-header" aria-hidden="true">
-            <span>時刻</span>
-            <span>種類</span>
-            <span>送信元</span>
-            <span>宛先</span>
+        <div class="live-stream">
+          <div class="live-stream__header">
+            <div>
+              <span class="live-dot" aria-hidden="true"></span>
+              <strong>いま、この瞬間にも流れている通信</strong>
+            </div>
+            <span>色の違いはパケットの届け方の違いです</span>
           </div>
-          <div id="flow-list" class="flow-list"></div>
-        </div>
-
-        <div class="alert-wrap">
-          <h3 class="panel-sublabel">レートアラート</h3>
-          <div id="alert-log" class="alert-log"></div>
+          <div id="waterfall-container" class="waterfall" aria-label="流れるパケット">
+            <p id="waterfall-idle" class="waterfall-idle">パケットを待っています…</p>
+          </div>
         </div>
       </section>
+
+      <aside class="discovery-panel" aria-label="通信の詳しい情報">
+        <section class="discovery-card discovery-card--result">
+          <p class="section-kicker">DISCOVERY</p>
+          <h2>つかまえた通信の正体</h2>
+          <p class="discovery-intro">難しい言葉はあとで大丈夫。まずは「本当に流れている」ことを見てみよう。</p>
+
+          <div class="protocol-result">
+            <div id="behind-protocol" class="proto-badge proto-badge--idle">まだ待機中</div>
+            <div class="ip-pair">
+              <div class="ip-endpoint">
+                <small>出発地</small>
+                <span id="behind-src">—</span>
+                <span id="behind-src-port" class="ip-port"></span>
+              </div>
+              <span class="ip-pair__arrow" aria-hidden="true">→</span>
+              <div class="ip-endpoint">
+                <small>目的地</small>
+                <span id="behind-dst">—</span>
+                <span id="behind-dst-port" class="ip-port"></span>
+              </div>
+            </div>
+            <p id="behind-summary" class="behind-summary">
+              操作に対応するパケットをXDPが捕まえると、ここで旅の正体が分かります。
+            </p>
+          </div>
+
+          <div id="layer-bridge-card" class="layer-bridge-card" hidden>
+            <p class="layer-bridge-card__title">別々に見えて、実は同じ出来事</p>
+            <div class="layer-bridge-card__cols">
+              <p id="bridge-high-text">—</p>
+              <span aria-hidden="true">＝</span>
+              <p id="bridge-low-text">—</p>
+            </div>
+          </div>
+        </section>
+
+        <details class="deep-dive">
+          <summary>
+            <span><small>FOR THE CURIOUS</small>もっと深く見てみる</span>
+            <span class="deep-dive__plus" aria-hidden="true">＋</span>
+          </summary>
+
+          <div class="deep-dive__body">
+            <section class="metric-strip" aria-label="通信量">
+              <div><small>1秒間</small><strong><span id="pps-detail-value">0</span><em> packets</em></strong></div>
+              <div><small>見つけた総数</small><strong id="total-value">0</strong></div>
+            </section>
+
+            <section class="osi-stack" id="osi-stack" aria-label="OSI参照モデル">
+              <header class="osi-stack__header">
+                <h3 class="osi-stack__title">通信のどこを見ている？</h3>
+                <p id="osi-focus" class="osi-focus">いまの視点: L7（操作）</p>
+              </header>
+              <ol class="osi-stack__layers">
+                <li class="osi-layer" data-osi="7"><span class="osi-layer__num">7</span><span class="osi-layer__name">アプリ</span></li>
+                <li class="osi-layer osi-layer--dim" data-osi="6"><span class="osi-layer__num">6</span><span class="osi-layer__name">表現</span></li>
+                <li class="osi-layer osi-layer--dim" data-osi="5"><span class="osi-layer__num">5</span><span class="osi-layer__name">会話</span></li>
+                <li class="osi-layer" data-osi="4"><span class="osi-layer__num">4</span><span class="osi-layer__name">届け方</span></li>
+                <li class="osi-layer" data-osi="3"><span class="osi-layer__num">3</span><span class="osi-layer__name">宛先</span></li>
+                <li class="osi-layer" data-osi="2"><span class="osi-layer__num">2</span><span class="osi-layer__name">入口</span></li>
+                <li class="osi-layer osi-layer--dim" data-osi="1"><span class="osi-layer__num">1</span><span class="osi-layer__name">信号</span></li>
+              </ol>
+            </section>
+
+            <section class="flow-section">
+              <h3>最近見つけたパケット</h3>
+              <div class="flow-list-header" aria-hidden="true"><span>時刻</span><span>種類</span><span>送信元</span><span>宛先</span></div>
+              <div id="flow-list" class="flow-list"></div>
+            </section>
+
+            <section class="alert-wrap">
+              <h3>いつもより多い通信</h3>
+              <div id="alert-log" class="alert-log"></div>
+            </section>
+          </div>
+        </details>
+      </aside>
     </main>
 
     <div id="capture-toast" class="capture-toast" hidden aria-live="polite">
       <span class="capture-toast__icon" aria-hidden="true">✓</span>
       <p id="capture-toast-text" class="capture-toast__text"></p>
     </div>
-
     <div id="attack-flash" class="attack-flash" aria-hidden="true"></div>
-    <p id="build-stamp" class="build-stamp" aria-hidden="true"></p>
+    <span id="build-stamp" class="build-stamp" aria-hidden="true"></span>
   </body>
 </html>

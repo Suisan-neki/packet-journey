@@ -87,8 +87,6 @@ const state = {
   webDemo: false,
   demoTimer: null,
   flowStepTimer: null,
-  highlightUntil: 0,
-  highlightSrc: null,
   lastActionLabel: null,
   hasAction: false,
   currentLayer: "l7",
@@ -103,6 +101,7 @@ function cacheElements() {
   els.webBanner = document.querySelector("#web-banner");
   els.simulateButton = document.querySelector("#simulate-button");
   els.ppsValue = document.querySelector("#pps-value");
+  els.ppsDetailValue = document.querySelector("#pps-detail-value");
   els.totalValue = document.querySelector("#total-value");
   els.waterfall = document.querySelector("#waterfall-container");
   els.waterfallIdle = document.querySelector("#waterfall-idle");
@@ -125,10 +124,11 @@ function cacheElements() {
   els.bridgeHighText = document.querySelector("#bridge-high-text");
   els.bridgeLowText = document.querySelector("#bridge-low-text");
   els.mainCanvas = document.querySelector("#main-canvas");
-  els.panelLeft = document.querySelector(".panel--left");
-  els.panelRight = document.querySelector(".panel--right");
   els.osiLayers = document.querySelectorAll(".osi-layer");
   els.osiFocus = document.querySelector("#osi-focus");
+  els.physicalPrompt = document.querySelector("#physical-prompt");
+  els.captureStageTitle = document.querySelector("#capture-stage-title");
+  els.captureStageCopy = document.querySelector("#capture-stage-copy");
 }
 
 function protocolMeta(protocol) {
@@ -241,15 +241,11 @@ function setLayerNarration(key) {
 
 function setActiveLayer(layer) {
   state.currentLayer = layer;
+  els.mainCanvas.dataset.layer = layer;
   setActiveFlowStep(layer);
   setLayerNarration(layer);
   setOsiHighlight(layer);
 
-  const isLow = layer === "l2" || layer === "linked" || layer === "low";
-  const isHigh = layer === "l7" || layer === "linked" || layer === "high";
-  els.panelLeft?.classList.toggle("panel--layer-active", isLow);
-  els.panelRight?.classList.toggle("panel--layer-active", isHigh);
-  els.mainCanvas?.classList.toggle("main-canvas--linked", layer === "linked");
 }
 
 function showLayerBridge(label, protocol, route) {
@@ -262,7 +258,6 @@ function showLayerBridge(label, protocol, route) {
 
 function hideLayerBridge() {
   els.layerBridgeCard.hidden = true;
-  els.mainCanvas?.classList.remove("main-canvas--linked");
 }
 
 function showCaptureToast(message) {
@@ -295,7 +290,13 @@ function setCurrentAction(text, active = true) {
 
 function updateStats() {
   els.ppsValue.textContent = formatNumber(state.pps);
+  els.ppsDetailValue.textContent = formatNumber(state.pps);
   els.totalValue.textContent = formatNumber(state.total);
+}
+
+function setCaptureStage(title, copy) {
+  els.captureStageTitle.textContent = title;
+  els.captureStageCopy.textContent = copy;
 }
 
 function setBehindData(event) {
@@ -399,7 +400,9 @@ function dropPacket(event, { highlight = false } = {}) {
 
   el.addEventListener("animationend", () => el.remove());
 
-  updateLatestPacket(event, highlight);
+  if (highlight) {
+    updateLatestPacket(event, true);
+  }
 }
 
 function handleEvent(event) {
@@ -420,6 +423,7 @@ function handleEvent(event) {
     state.lastActionLabel = event.label ?? "操作";
     state.hasAction = true;
     setCurrentAction(`【${state.lastActionLabel}】ボタンが押されました`);
+    setCaptureStage("XDPが捜索中…", "操作から生まれたパケットを、カーネルの入口で探しています");
     hideLayerBridge();
     setActiveLayer("l7");
     window.clearTimeout(state.flowStepTimer);
@@ -440,9 +444,8 @@ function handleEvent(event) {
     )}`;
     setCurrentAction(`【${label}】ボタンが押されました`);
     setBehindData({ ...event, label });
+    setCaptureStage("見つけた！", `${protocol}パケットをXDPがカーネルの入口で捕まえました`);
     showLayerBridge(label, protocol, route);
-    state.highlightSrc = event.src;
-    state.highlightUntil = performance.now() + 5000;
     window.clearTimeout(state.flowStepTimer);
     setActiveLayer("linked");
     showCaptureToast("つながった！L7 の操作と L4·L3·L2 のパケットは同じ出来事です");
@@ -464,9 +467,6 @@ function handleEvent(event) {
     dropPacket(event);
     pushFlowRow(event, false);
     updateStats();
-    if (!state.hasAction && (state.currentLayer === "l7" || state.currentLayer === "high")) {
-      setActiveLayer("l4l3");
-    }
   }
 }
 
@@ -614,6 +614,8 @@ function setupWebDemo() {
   state.webDemo = true;
   els.webBanner.hidden = false;
   els.demoToggle.hidden = true;
+  els.simulateButton.hidden = false;
+  els.physicalPrompt.hidden = true;
   startBackgroundDemo();
   els.simulateButton.addEventListener("click", () => {
     els.simulateButton.disabled = true;
