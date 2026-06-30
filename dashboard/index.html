@@ -4,9 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Packet Journey — 見えない通信をつかまえよう</title>
-    <link rel="stylesheet" href="/src/styles.css" />
-    <link rel="stylesheet" href="/src/journey.css" />
-    <script type="module" src="/src/main.js" defer></script>
+    <script type="module" src="/src/entry.js" defer></script>
   </head>
   <body>
     <div id="web-banner" class="web-banner" hidden>
@@ -35,25 +33,25 @@
       </div>
     </nav>
 
-    <main class="main-canvas" id="main-canvas" data-layer="l7">
+    <main class="main-canvas" id="main-canvas" data-layer="l7" data-screen="intro">
       <section class="story-panel" aria-labelledby="story-title">
         <header class="story-header">
           <p class="eyebrow">見えない通信の旅を追う</p>
-          <h1 id="story-title">ボタンを押すと、<br />小さなパケットが旅に出る。</h1>
+          <h1 id="story-title">ボタンを押すと、<br />小さな荷物が海へ出る。</h1>
           <p class="story-lead">
-            いつもの操作の裏側では、小さなデータの荷物が生まれています。
-            Packet Journey は、その旅をカーネルの入口まで追いかけ、XDPがつかまえた通信の正体を表示します。
+            画面の操作から生まれたデータの荷物は、宛先を持って海を渡り、
+            最後にカーネルの港でXDPに見つかります。
           </p>
         </header>
 
         <div class="start-action">
           <button id="simulate-button" class="simulate-button" type="button" hidden>
-            <span>通信を起こす</span>
+            <span>船を出す</span>
             <small>状態確認ボタンを押す</small>
           </button>
           <div id="physical-prompt" class="physical-prompt">
             <span class="physical-prompt__pulse" aria-hidden="true"></span>
-            <span><strong>机のボタンを押してみて</strong><small>あなたの操作から、パケットの旅が始まります</small></span>
+            <span><strong>机のボタンを押してみて</strong><small>あなたの操作から、荷物を積んだ船が出発します</small></span>
           </div>
         </div>
 
@@ -63,9 +61,9 @@
               <span class="journey-step__number">1</span>
               <span class="journey-step__layer">L7</span>
             </div>
-            <p class="journey-step__verb">旅のはじまり</p>
+            <p class="journey-step__verb">港を出る</p>
             <p id="current-action" class="current-action current-action--idle">
-              まだパケットは生まれていません
+              まだ荷物は積まれていません
             </p>
           </article>
 
@@ -79,9 +77,9 @@
               <span class="journey-step__number">2</span>
               <span class="journey-step__layer">L4 · L3</span>
             </div>
-            <p class="journey-step__verb">宛先を持って進む</p>
+            <p class="journey-step__verb">海を渡る</p>
             <div id="packet-latest" class="packet-latest packet-latest--idle" aria-live="polite">
-              パケットが生まれると、ここに行き先が現れます
+              船が進み出すと、ここに行き先が現れます
             </div>
           </article>
 
@@ -95,16 +93,16 @@
               <span class="journey-step__number">3</span>
               <span class="journey-step__layer">L2</span>
             </div>
-            <p id="capture-stage-title" class="journey-step__verb">カーネルの入口で待つ</p>
+            <p id="capture-stage-title" class="journey-step__verb">カーネルの港で待つ</p>
             <p id="capture-stage-copy" class="capture-stage-copy">
-              XDPが、通り過ぎるパケットを見張っています
+              XDPが、入ってくる船を見張っています
             </p>
             <span class="xdp-radar" aria-hidden="true"><i></i></span>
           </article>
         </div>
 
         <p id="layer-narration" class="layer-narration" aria-live="polite">
-          ボタンを押すと、小さなパケットの旅を通信の奥深くまで追いかけます
+          ボタンを押すと、データの荷物が通信の海へ出発します
         </p>
 
         <div class="live-stream">
@@ -124,8 +122,8 @@
       <aside class="discovery-panel" aria-label="通信の詳しい情報">
         <section class="discovery-card discovery-card--result">
           <p class="section-kicker">観測記録</p>
-          <h2>つかまえたパケットの正体</h2>
-          <p class="discovery-intro">ボタン操作から生まれた通信を、XDPがカーネルの入口で見つけます。どこから来て、どこへ向かったのかをここで確認できます。</p>
+          <h2>港でつかまえた荷物の正体</h2>
+          <p class="discovery-intro">ボタン操作から生まれた通信を、XDPがカーネルの港で見つけます。どこから来て、どこへ向かったのかをここで確認できます。</p>
 
           <div class="protocol-result">
             <div id="behind-protocol" class="proto-badge proto-badge--idle">まだ待機中</div>
