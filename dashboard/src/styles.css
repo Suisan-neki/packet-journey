@@ -44,6 +44,10 @@ button {
   cursor: pointer;
 }
 
+.web-banner[hidden] {
+  display: none;
+}
+
 .web-banner {
   display: flex;
   align-items: center;
@@ -298,6 +302,11 @@ button {
   font-weight: 500;
 }
 
+.current-action--idle {
+  color: var(--on-surface-variant);
+  font-weight: 400;
+}
+
 .ip-pair {
   display: flex;
   align-items: center;
@@ -358,6 +367,23 @@ button {
   font-weight: 500;
 }
 
+.flow-row--dim {
+  opacity: 0.6;
+}
+
+.flow-row--hit.flow-row--dim {
+  opacity: 1;
+}
+
+.flow-list-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--on-surface-variant);
+  font-family: var(--font);
+  font-size: 13px;
+  text-align: center;
+}
+
 .flow-row time {
   opacity: 0.65;
   font-family: var(--font);
@@ -365,6 +391,10 @@ button {
 
 .alert-wrap {
   flex-shrink: 0;
+}
+
+.alert-wrap:has(.alert-log:empty) {
+  display: none;
 }
 
 .alert-log {
@@ -389,7 +419,7 @@ button {
   top: 112px;
   left: 50%;
   z-index: 50;
-  display: flex;
+  display: none;
   align-items: center;
   gap: 16px;
   max-width: min(900px, calc(100vw - 48px));
@@ -402,7 +432,12 @@ button {
   pointer-events: none;
 }
 
+.capture-toast[hidden] {
+  display: none;
+}
+
 .capture-toast.visible {
+  display: flex;
   animation: toastSlide 4s ease-in-out forwards;
 }
 

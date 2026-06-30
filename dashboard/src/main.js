@@ -19,9 +19,11 @@ const state = {
   demo: false,
   webDemo: false,
   demoTimer: null,
+  flowStepTimer: null,
   highlightUntil: 0,
   highlightSrc: null,
   lastActionLabel: null,
+  hasAction: false,
 };
 
 const els = {};
@@ -48,7 +50,12 @@ function cacheElements() {
 }
 
 function setStatus(status) {
-  const key = state.demo || state.webDemo ? "demo" : status;
+  let key = status;
+  if (state.webDemo) {
+    key = "connected";
+  } else if (state.demo) {
+    key = "demo";
+  }
   state.status = key;
   els.status.textContent = STATUS_LABELS[key] ?? key;
   els.statusDot.className = `status-dot ${key}`;
@@ -83,8 +90,16 @@ function showCaptureToast(message) {
   }, 4000);
 }
 
-function plainSummary(label) {
+function plainSummary(label, src, dst) {
+  if (src && dst && src !== "—" && dst !== "—") {
+    return `「${label}」という信号が、${src} と ${dst} の間でやり取りされました。`;
+  }
   return `「${label}」という操作が、ネットワーク上では送信元と宛先の間の通信として見えます。`;
+}
+
+function setCurrentAction(text, active = true) {
+  els.currentAction.textContent = text;
+  els.currentAction.classList.toggle("current-action--idle", !active);
 }
 
 function updateStats() {
@@ -108,20 +123,24 @@ function handleEvent(event) {
 
   if (event.type === "physical_action") {
     state.lastActionLabel = event.label ?? "操作";
-    els.currentAction.textContent = `【${state.lastActionLabel}】ボタンが押されました`;
+    state.hasAction = true;
+    setCurrentAction(`【${state.lastActionLabel}】ボタンが押されました`);
     setActiveFlowStep("flow");
+    window.clearTimeout(state.flowStepTimer);
+    state.flowStepTimer = window.setTimeout(() => setActiveFlowStep("observe"), 400);
     showCaptureToast("操作を検知しました。通信を待っています…");
     return;
   }
 
   if (event.type === "action_correlated") {
     const label = event.label ?? state.lastActionLabel ?? "操作";
-    els.currentAction.textContent = `【${label}】ボタンが押されました`;
+    setCurrentAction(`【${label}】ボタンが押されました`);
     els.behindSrc.textContent = event.src ?? "—";
     els.behindDst.textContent = event.dst ?? "—";
-    els.behindSummary.textContent = plainSummary(label);
+    els.behindSummary.textContent = plainSummary(label, event.src, event.dst);
     state.highlightSrc = event.src;
     state.highlightUntil = performance.now() + 5000;
+    window.clearTimeout(state.flowStepTimer);
     setActiveFlowStep("display");
     showCaptureToast(
       "【通信を捕捉しました！】あなたの操作がネットワーク上に見つかりました。",
@@ -154,14 +173,28 @@ function pushFlowRow(event, highlighted) {
 
 function renderFlowList() {
   els.flowList.replaceChildren();
-  state.flowRows.forEach((row) => {
+  if (state.flowRows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "flow-list-empty";
+    empty.textContent = "通信が捕捉されるとここに表示されます";
+    els.flowList.appendChild(empty);
+    return;
+  }
+
+  state.flowRows.forEach((row, index) => {
     const el = document.createElement("div");
-    el.className = `flow-row${row.highlighted ? " flow-row--hit" : ""}`;
-    el.innerHTML = `
-      <time>${row.time}</time>
-      <span>${row.src}</span>
-      <span>${row.dst}</span>
-    `;
+    el.className = `flow-row${row.highlighted ? " flow-row--hit" : ""}${
+      index > 0 ? " flow-row--dim" : ""
+    }`;
+
+    const time = document.createElement("time");
+    time.textContent = row.time;
+    const src = document.createElement("span");
+    src.textContent = row.src;
+    const dst = document.createElement("span");
+    dst.textContent = row.dst;
+
+    el.append(time, src, dst);
     els.flowList.appendChild(el);
   });
 }
@@ -247,9 +280,9 @@ function emitDemoFlow() {
       dst_port: [80, 443, 8080][Math.floor(Math.random() * 3)],
     });
   }
-  const baseline = 60 + Math.floor(Math.random() * 220);
-  state.pps = Math.random() > 0.88 ? baseline + 200 : baseline;
-  state.total = Math.max(state.total, 12480) + burst;
+  const baseline = 40 + Math.floor(Math.random() * 180);
+  state.pps = Math.random() > 0.88 ? baseline + 180 : baseline;
+  state.total += burst;
   if (state.pps > 400) {
     handleEvent({ type: "alert", dst: "192.168.1.10", rate: state.pps });
   }
@@ -287,9 +320,7 @@ function startBackgroundDemo() {
   els.demoToggle.setAttribute("aria-pressed", "true");
   els.demoToggle.classList.add("active");
   setStatus("demo");
-  state.pps = 342;
-  state.total = 12480;
-  updateStats();
+  emitDemoFlow();
   state.demoTimer = window.setInterval(emitDemoFlow, 2200);
 }
 
@@ -348,6 +379,8 @@ window.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   setupWaterfall();
   updateStats();
+  renderFlowList();
+  setCurrentAction("ボタンを押すとここに表示されます", false);
   setStatus("waiting");
   setActiveFlowStep("button");
   els.demoToggle.addEventListener("click", toggleDemo);

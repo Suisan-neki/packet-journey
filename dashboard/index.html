@@ -78,7 +78,9 @@
 
         <div class="detail-card">
           <h3 class="panel-sublabel">いま行われた操作</h3>
-          <p id="current-action" class="current-action">ボタンを押すとここに表示されます</p>
+          <p id="current-action" class="current-action current-action--idle">
+            ボタンを押すとここに表示されます
+          </p>
         </div>
 
         <div class="detail-card">
@@ -104,11 +106,9 @@
       </section>
     </main>
 
-    <div id="capture-toast" class="capture-toast" hidden>
+    <div id="capture-toast" class="capture-toast" hidden aria-live="polite">
       <span class="capture-toast__icon" aria-hidden="true">✓</span>
-      <p id="capture-toast-text" class="capture-toast__text">
-        【通信を捕捉しました！】あなたの操作がネットワーク上に見つかりました。
-      </p>
+      <p id="capture-toast-text" class="capture-toast__text"></p>
     </div>
 
     <div id="attack-flash" class="attack-flash" aria-hidden="true"></div>
