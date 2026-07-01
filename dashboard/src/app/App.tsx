@@ -178,14 +178,14 @@ function fr(
 
 const FRAMES: Frame[] = [
   fr("idle",     "待機中",                  "idle",     null,null, null,null,   "none","none",   false,false,false, 0),
-  fr("req-l7",   "お願いを作る",             "req-gen",  0,   null, "down",null, "none","none",   false,false,false, 640),
+  fr("req-l7",   "リクエストを作る",         "req-gen",  0,   null, "down",null, "none","none",   false,false,false, 640),
   fr("req-l6",   "形式を整える",             "req-gen",  1,   null, "down",null, "none","none",   false,false,false, 560),
   fr("req-l5",   "つながりを記録する",       "req-gen",  2,   null, "down",null, "none","none",   false,false,false, 560),
   fr("req-l4",   "アプリ番号を付ける",       "req-gen",  3,   null, "down",null, "none","none",   false,false,false, 560),
   fr("req-l3",   "端末の住所を付ける",       "req-gen",  4,   null, "down",null, "none","none",   false,false,false, 560),
   fr("req-l2",   "配送情報を付ける",         "req-gen",  5,   null, "down",null, "none","none",   false,false,false, 560),
   fr("req-l1",   "電気信号として送り出す",   "req-gen",  6,   null, "down",null, "none","none",   false,false,false, 640),
-  fr("req-sail", "お願いを送信中",           "req-sail", null,null, null,null,   "req","none",    false,false,false, 4700),
+  fr("req-sail", "リクエストを送信中",       "req-sail", null,null, null,null,   "req","none",    false,false,false, 4700),
   fr("xdp-chk",  "入口で確認中...",          "xdp",      null,5,    null,null,   "req","checking",false,false,false, 950),
   fr("xdp-pass", "XDP_PASS（確認完了）",      "xdp",      null,5,    null,null,   "req","passed",  false,false,false, 1700),
   fr("srv-l1",   "信号を受け取る",           "srv-recv", null,6,    null,"up",   "req","passed",  false,false,false, 530),
@@ -194,23 +194,23 @@ const FRAMES: Frame[] = [
   fr("srv-l4",   "アプリ番号を確認する",     "srv-recv", null,3,    null,"up",   "none","passed", false,false,false, 530),
   fr("srv-l5",   "つながりを確認する",       "srv-recv", null,2,    null,"up",   "none","passed", false,false,false, 530),
   fr("srv-l6",   "形式を確認する",           "srv-recv", null,1,    null,"up",   "none","passed", false,false,false, 530),
-  fr("srv-l7",   "お願いを取り出す",         "srv-recv", null,0,    null,"up",   "none","passed", false,false,false, 720),
+  fr("srv-l7",   "リクエストを取り出す",     "srv-recv", null,0,    null,"up",   "none","passed", false,false,false, 720),
   fr("srv-proc", "サーバーが処理中",         "srv-proc", null,0,    null,null,   "none","none",   true,false,false,  2400),
-  fr("resp-l7",  "返事を作る",               "resp-gen", null,0,    null,"down", "resp","none",   false,true,false,  580),
+  fr("resp-l7",  "レスポンスを作る",         "resp-gen", null,0,    null,"down", "resp","none",   false,true,false,  580),
   fr("resp-l6",  "形式を整える",             "resp-gen", null,1,    null,"down", "resp","none",   false,true,false,  540),
   fr("resp-l5",  "つながりを記録する",       "resp-gen", null,2,    null,"down", "resp","none",   false,true,false,  540),
   fr("resp-l4",  "アプリ番号を付ける",       "resp-gen", null,3,    null,"down", "resp","none",   false,true,false,  540),
   fr("resp-l3",  "端末の住所を付ける",       "resp-gen", null,4,    null,"down", "resp","none",   false,true,false,  540),
   fr("resp-l2",  "配送情報を付ける",         "resp-gen", null,5,    null,"down", "resp","none",   false,true,false,  540),
   fr("resp-l1",  "電気信号として送り出す",   "resp-gen", null,6,    null,"down", "resp","none",   false,true,false,  600),
-  fr("resp-sail","返事を送信中",             "resp-sail",null,null, null,null,   "resp","none",   false,true,false,  4700),
+  fr("resp-sail","レスポンスを送信中",       "resp-sail",null,null, null,null,   "resp","none",   false,true,false,  4700),
   fr("cli-l1",   "信号を受け取る",           "cli-recv", 6,   null, "up",null,   "resp","none",   false,true,false,  530),
   fr("cli-l2",   "配送情報を確認する",       "cli-recv", 5,   null, "up",null,   "none","none",   false,true,false,  530),
   fr("cli-l3",   "端末の住所を確認する",     "cli-recv", 4,   null, "up",null,   "none","none",   false,true,false,  530),
   fr("cli-l4",   "アプリ番号を確認する",     "cli-recv", 3,   null, "up",null,   "none","none",   false,true,false,  530),
   fr("cli-l5",   "つながりを確認する",       "cli-recv", 2,   null, "up",null,   "none","none",   false,true,false,  530),
   fr("cli-l6",   "形式を確認する",           "cli-recv", 1,   null, "up",null,   "none","none",   false,true,false,  530),
-  fr("cli-l7",   "返事を受け取る",           "cli-recv", 0,   null, "up",null,   "none","none",   false,true,true,   800),
+  fr("cli-l7",   "レスポンスを受け取る",     "cli-recv", 0,   null, "up",null,   "none","none",   false,true,true,   800),
   fr("complete", "往復が完了しました",        "complete", null,null, null,null,   "none","none",   false,true,true,   0),
 ];
 
@@ -371,6 +371,53 @@ function OsiRow({
   );
 }
 
+const OVERVIEW_STAGES = [
+  { title: "アプリ", tech: "HTTP / L7–L5", layers: [0, 1, 2], description: "ボタン操作からリクエストを作る" },
+  { title: "TCP/IP", tech: "TCP・IP / L4–L3", layers: [3, 4], description: "宛先とアプリの番号を付ける" },
+  { title: "ネットワーク", tech: "Ethernet・信号 / L2–L1", layers: [5, 6], description: "相手の端末へ送り出す" },
+  { title: "カーネル入口", tech: "eBPF / XDP", layers: [], description: "届いたパケットを早い段階で観測する" },
+];
+
+function OverviewRow({
+  title, tech, description, active, direction, isXdp,
+}: {
+  title: string;
+  tech: string;
+  description: string;
+  active: boolean;
+  direction: "down" | "up" | null;
+  isXdp: boolean;
+}) {
+  const accent = isXdp ? "#9A6258" : direction === "down" ? "#B89A6D" : "#789D99";
+  return (
+    <div style={{
+      flex: 1,
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: "0 10px",
+      borderBottom: "1px solid rgba(120,157,153,0.09)",
+      borderLeft: `3px solid ${active ? accent : "transparent"}`,
+      background: active ? `${isXdp ? "rgba(154,98,88,0.07)" : "rgba(120,157,153,0.07)"}` : "transparent",
+      transition: "background 0.35s, border-color 0.35s",
+      minHeight: 0,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: active ? "13px" : "12px", color: active ? "#F1EFE8" : "rgba(241,239,232,0.65)" }}>
+          {title}
+        </div>
+        <div style={{ fontSize: "9px", color: "#9CA8AD", opacity: active ? 0.85 : 0.45, lineHeight: 1.5 }}>
+          {description}
+        </div>
+        <div style={{ fontSize: "8px", fontFamily: "monospace", color: accent, opacity: active ? 0.75 : 0.3, marginTop: "2px" }}>
+          {tech}
+        </div>
+      </div>
+      {active && direction && <span style={{ color: accent, fontSize: "14px" }}>{direction === "down" ? "↓" : "↑"}</span>}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PORT COLUMN
 // ─────────────────────────────────────────────────────────────────────────────
@@ -441,20 +488,37 @@ function PortColumn({ side, frame, simpleMode, packet }: {
 
       {/* OSI layer stack */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {OSI.map((_, idx) => {
-          const [ms, mt] = getMsgs(idx);
-          return (
-            <OsiRow
-              key={idx} idx={idx}
-              active={activeLayer === idx}
-              dir={dir}
-              simpleMode={simpleMode}
-              xdpState={xdp}
-              msgSimple={ms}
-              msgTech={mt}
-            />
-          );
-        })}
+        {simpleMode
+          ? OVERVIEW_STAGES.map((stage, idx) => {
+              const xdpStageActive = idx === 3 && !isClient && phase === "xdp";
+              const serverAtXdp = !isClient && phase === "xdp";
+              const active = xdpStageActive || (!serverAtXdp && activeLayer !== null && stage.layers.includes(activeLayer));
+              return (
+                <OverviewRow
+                  key={stage.title}
+                  title={stage.title}
+                  tech={stage.tech}
+                  description={stage.description}
+                  active={active}
+                  direction={xdpStageActive ? null : dir}
+                  isXdp={xdpStageActive}
+                />
+              );
+            })
+          : OSI.map((_, idx) => {
+              const [ms, mt] = getMsgs(idx);
+              return (
+                <OsiRow
+                  key={idx} idx={idx}
+                  active={activeLayer === idx}
+                  dir={dir}
+                  simpleMode={simpleMode}
+                  xdpState={xdp}
+                  msgSimple={ms}
+                  msgTech={mt}
+                />
+              );
+            })}
       </div>
 
       {/* Status footer */}
@@ -473,13 +537,13 @@ function PortColumn({ side, frame, simpleMode, packet }: {
         )}
         {!isClient && frame.respReady && phase !== "srv-proc" && !["resp-gen","resp-sail","cli-recv","complete"].includes(phase) && (
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
-            <div style={{ fontSize: "11px", color: "#B89A6D" }}>返事の準備完了</div>
+            <div style={{ fontSize: "11px", color: "#B89A6D" }}>レスポンスの準備完了</div>
             {!simpleMode && <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.6 }}>200 OK</div>}
           </div>
         )}
         {isClient && frame.cliDone && (
           <div>
-            <div style={{ fontSize: "11px", color: "#789D99" }}>返事を受け取りました</div>
+            <div style={{ fontSize: "11px", color: "#789D99" }}>レスポンスを受け取りました</div>
             {!simpleMode && <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.6 }}>HTTP 200 OK</div>}
           </div>
         )}
@@ -598,15 +662,24 @@ function SeaCenter({
       const passed = xdp === "passed";
       return (
         <div style={{ padding: "12px 14px" }}>
+          <div style={{
+            display: "inline-block", marginBottom: "8px", padding: "3px 7px",
+            border: "1px solid rgba(184,154,109,0.45)", color: "#B89A6D",
+            fontSize: "8px", letterSpacing: "0.16em", textTransform: "uppercase",
+          }}>
+            この展示の核
+          </div>
           <div style={{ fontSize: "13px", color: "#F1EFE8", lineHeight: 1.6, marginBottom: "8px", fontFamily: "'Noto Serif JP', serif", fontWeight: 300 }}>
             {passed
-              ? "検問を通過しました。"
-              : "カーネルの門番が検問します"}
+              ? "操作とパケットが結びつきました"
+              : "カーネル入口でパケットを観測します"}
           </div>
           <div style={{ fontSize: "11px", color: "#9CA8AD", lineHeight: 1.9, marginBottom: "10px", whiteSpace: "pre-line" }}>
             {passed
-              ? "荷物に問題がなかったため、\nサーバー内部へ進みます。"
-              : "サーバーに到着した瞬間、OSの奥深く（カーネル）で\nプログラムがすばやく荷物を検査します。\nユーザーの知らない裏側で、安全を守っています。"}
+              ? webDemo
+                ? "Web版では展示本番の相関結果を再現しています。\n実機ではボタン操作と観測パケットをここで結びつけます。"
+                : "ボタン操作と、実際に流れたパケットを相関できました。\nこのパケットは通常のカーネル処理へ進みます。"
+              : "XDPはアプリに届くより前の段階で通信を観測し、\n通す・捨てる・転送するといった判断ができます。"}
           </div>
           {passed && (
             <div style={{
@@ -662,16 +735,16 @@ function SeaCenter({
       return (
         <div style={{ padding: "12px 14px" }}>
           <div style={{ fontSize: "13px", color: "#F1EFE8", fontFamily: "'Noto Serif JP', serif", fontWeight: 300, lineHeight: 1.6, marginBottom: "8px" }}>
-            サーバーが返事を作りました
+            サーバーがレスポンスを作りました
           </div>
           <div style={{ fontSize: "11px", color: "#9CA8AD", lineHeight: 1.9, marginBottom: "10px" }}>
-            サーバーはお願いを処理し、<br />成功したことを表す返事を作ります。
+            サーバーはリクエストを処理し、<br />成功したことを表すレスポンスを作ります。
           </div>
           <div style={{ padding: "8px 12px", border: "1px solid rgba(184,154,109,0.35)", display: "inline-block" }}>
             <div style={{ fontSize: "12px", color: "#B89A6D", fontFamily: "monospace" }}>200 OK</div>
             {!simpleMode && (
               <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.65, marginTop: "2px" }}>
-                HTTP 200 OK — お願いを正常に受け取り、処理できたことを表します。
+                HTTP 200 OK — リクエストを正常に受け取り、処理できたことを表します。
               </div>
             )}
           </div>
@@ -688,9 +761,9 @@ function SeaCenter({
 
       const phaseTitle: Record<string, string> = {
         "req-gen":  "送る準備をしています",
-        "srv-recv": "お願いを開いています",
-        "resp-gen": "返事の準備をしています",
-        "cli-recv": "返事を受け取っています",
+        "srv-recv": "リクエストを開いています",
+        "resp-gen": "レスポンスの準備をしています",
+        "cli-recv": "レスポンスを受け取っています",
       };
 
       return (
@@ -801,10 +874,11 @@ function SeaCenter({
         </h1>
         <p style={{
           fontSize: "12px", color: "#9CA8AD", fontWeight: 300,
-          lineHeight: 2.1, textAlign: "center", marginBottom: "36px", maxWidth: "280px",
+          lineHeight: 2.1, textAlign: "center", marginBottom: "30px", maxWidth: "440px",
         }}>
-          「状態確認」を押すと、HTTP リクエストが送信され、レスポンスが返ります。<br />
-          普段は見えない通信の中身を、船旅として一緒に追いかけます。
+          {webDemo
+            ? <>ボタン操作がHTTP通信になり、XDPで観測される流れを体験するWebデモです。<br />表示値は説明用サンプルで、展示本番では物理ボタンと実際の観測データを使います。</>
+            : <>物理ボタンの操作から生まれたHTTP通信を、XDPがカーネル入口で観測します。<br />操作と実際のパケットが結びつく瞬間を追いかけます。</>}
         </p>
         <button onClick={onLaunch}
           style={{
@@ -845,7 +919,7 @@ function SeaCenter({
         {isReqSail && (
           <>
             <div style={{ fontSize: "11px", color: "#B89A6D", letterSpacing: "0.1em", marginBottom: "6px" }}>
-              お願いを送信中 →
+              リクエストを送信中 →
             </div>
             {!simpleMode && (
               <div style={{ fontSize: "10px", fontFamily: "monospace", color: "#9CA8AD", lineHeight: 1.8 }}>
@@ -857,7 +931,7 @@ function SeaCenter({
         {isRespSail && (
           <>
             <div style={{ fontSize: "11px", color: "#789D99", letterSpacing: "0.1em", marginBottom: "6px" }}>
-              ← 返事を送信中
+              ← レスポンスを送信中
             </div>
             {!simpleMode && (
               <div style={{ fontSize: "10px", fontFamily: "monospace", color: "#9CA8AD", lineHeight: 1.8 }}>
@@ -888,11 +962,11 @@ function SeaCenter({
           <div>あなたがしたこと：<span style={{ color: "#F1EFE8" }}>状態確認を押した</span></div>
           <div>送信したリクエスト：<span style={{ color: "#F1EFE8", fontFamily: "monospace" }}>GET /health</span></div>
           <div>入口での確認：<span style={{ color: "#F1EFE8" }}>パケットを検査し、<span style={{ fontFamily: "monospace" }}>{packet.xdpAction}</span> で通過させた</span></div>
-          <div>受信したレスポンス：<span style={{ color: "#B89A6D", fontFamily: "monospace" }}>200 OK</span></div>
+          <div>レスポンス（通信モデル）：<span style={{ color: "#B89A6D", fontFamily: "monospace" }}>200 OK</span></div>
         </div>
         <p style={{ fontSize: "10px", color: "#9CA8AD", lineHeight: 1.8, textAlign: "center", fontWeight: 300 }}>
-          画面上のひとつの操作も、届け先の情報を付けながら<br />
-          ネットワークを進み、返事を受け取ることで完了します。
+          つまり画面上の「押した」という操作はHTTPリクエストになり、<br />
+          TCP/IPをまとって進み、カーネル入口で観測できるパケットとして現れます。
         </p>
         {!simpleMode && (
           <div style={{
@@ -903,7 +977,7 @@ function SeaCenter({
           }}>
             {packet.protocol}リクエスト {packet.srcIp}:{packet.srcPort} → {packet.dstIp}:{packet.dstPort}<br />
             XDP ingress · {packet.xdpAction}<br />
-            HTTP Response 200 OK
+            HTTP Response 200 OK（通信モデル）
           </div>
         )}
       </div>
@@ -920,10 +994,10 @@ const TIMELINE = [
   { label: "送る準備をする",    tech: "L7→L1 encapsulation",  minIdx: 7 },
   { label: "ネットワークへ送信",tech: "TCP/IP送信",             minIdx: REQ_SAIL_IDX },
   { label: "入口で確認",        tech: "XDP ingress",           minIdx: XDP_IDX },
-  { label: "お願いを受け取る",  tech: "L1→L7 decapsulation",  minIdx: 17 },
+  { label: "リクエストを受信",  tech: "L1→L7 decapsulation",  minIdx: 17 },
   { label: "サーバーが処理",    tech: "HTTP処理",              minIdx: SRV_PROC_IDX },
-  { label: "返事を送り返す",    tech: "L7→L1 encapsulation",  minIdx: RESP_SAIL_IDX },
-  { label: "返事が届く",        tech: "L1→L7 decapsulation",  minIdx: 34 },
+  { label: "レスポンスを送信",  tech: "L7→L1 encapsulation",  minIdx: RESP_SAIL_IDX },
+  { label: "レスポンスが到着",  tech: "L1→L7 decapsulation",  minIdx: 34 },
 ];
 
 function VoyageLog({ open, frameIdx, simpleMode, packet, webDemo }: {
@@ -978,7 +1052,7 @@ function VoyageLog({ open, frameIdx, simpleMode, packet, webDemo }: {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px", marginBottom: "14px" }}>
             {[
               ["リクエスト",   "GET /health",     null],
-              ["レスポンス",   "200 OK",           null],
+              ["レスポンス（通信モデル）", "200 OK", null],
               [`担当部署ラベル（L4・${webDemo ? "デモ" : "観測"}）`, `${packet.srcPort} → ${packet.dstPort}`, `${packet.protocol} ポート番号`],
               [`宛先の住所（L3・${webDemo ? "デモ" : "観測"}）`, `${packet.srcIp} →\n${packet.dstIp}`, "IPアドレス"],
               ["入口での確認結果", packet.xdpAction, null],
@@ -1017,7 +1091,7 @@ function VoyageLog({ open, frameIdx, simpleMode, packet, webDemo }: {
                   <div>Ethernet フレーム（L2）</div>
                   <div style={{ paddingLeft: "12px" }}>└ IP パケット（{packet.srcIp} → {packet.dstIp}）（L3）</div>
                   <div style={{ paddingLeft: "24px" }}>└ {packet.protocol} セグメント（{packet.srcPort} → {packet.dstPort}）（L4）</div>
-                  <div style={{ paddingLeft: "36px" }}>└ HTTP GET /status（L7）</div>
+                  <div style={{ paddingLeft: "36px" }}>└ HTTP GET /health（L7）</div>
                   <div style={{ paddingLeft: "48px" }}>└ Payload: "状態確認"</div>
                 </>
               )}
@@ -1054,6 +1128,7 @@ export default function App() {
 
   const frame      = FRAMES[frameIdx];
   const isComplete = frame.phase === "complete";
+  const webDemo = isWebDemo();
 
   useEffect(() => {
     frameIdxRef.current = frameIdx;
@@ -1147,7 +1222,7 @@ export default function App() {
   }
 
   function start() {
-    if (isWebDemo()) {
+    if (webDemo) {
       setPacket(current => ({ ...current, srcPort: 52000 + Math.floor(Math.random() * 800) }));
     }
     setFrameIdx(1); setReqShipRight(false); setRespShipLeft(false);
@@ -1188,11 +1263,9 @@ export default function App() {
 
   // Quick-jump buttons config
   const quickJumps = [
-    { label: "お願いを作る",   sub: "req-gen",  idx: 1 },
-    { label: "海を渡る",       sub: "req-sail", idx: REQ_SAIL_IDX },
-    { label: "入口で確認",     sub: "XDP",      idx: XDP_IDX },
-    { label: "返事を作る",     sub: "resp-gen", idx: SRV_PROC_IDX },
-    { label: "戻ってくる",     sub: "resp-sail",idx: RESP_SAIL_IDX },
+    { label: "リクエスト",     sub: "HTTP",     idx: 1 },
+    { label: "XDP観測",        sub: "ingress",  idx: XDP_IDX },
+    { label: "レスポンス",     sub: "HTTP",     idx: SRV_PROC_IDX },
   ];
 
   return (
@@ -1235,7 +1308,7 @@ export default function App() {
             onMouseEnter={e => { e.currentTarget.style.color = "#F1EFE8"; e.currentTarget.style.borderColor = "rgba(120,157,153,0.6)"; }}
             onMouseLeave={e => { e.currentTarget.style.color = "#9CA8AD"; e.currentTarget.style.borderColor = "rgba(120,157,153,0.3)"; }}
           >
-            {simpleMode ? "技術名も見る" : "やさしく見る"}
+            {simpleMode ? "OSI 7層を見る" : "4段階で見る"}
           </button>
 
           {frame.phase !== "idle" && (
@@ -1254,6 +1327,21 @@ export default function App() {
         </div>
       </header>
 
+      <div style={{
+        height: "28px", flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        borderBottom: "1px solid rgba(120,157,153,0.12)",
+        background: webDemo ? "rgba(184,154,109,0.05)" : "rgba(120,157,153,0.05)",
+        color: "#9CA8AD", fontSize: "9px", letterSpacing: "0.04em",
+      }}>
+        <span style={{ color: webDemo ? "#B89A6D" : "#789D99", marginRight: "8px", letterSpacing: "0.12em" }}>
+          {webDemo ? "WEB再現モード" : "実機観測モード"}
+        </span>
+        {webDemo
+          ? "表示される通信情報は説明用サンプルです。展示本番では物理ボタンとeBPF/XDPの観測データを使います。"
+          : "Raspberry Piの物理操作と、eBPF/XDPが取得した観測値を表示しています。"}
+      </div>
+
       {/* ── MAIN SCENE ── */}
       <main style={{
         flex: 1, minHeight: 0,
@@ -1262,7 +1350,7 @@ export default function App() {
       }}>
         <PortColumn side="client" frame={frame} simpleMode={simpleMode} packet={packet} />
         <SeaCenter
-          frame={frame} packet={packet} webDemo={isWebDemo()} onLaunch={start}
+          frame={frame} packet={packet} webDemo={webDemo} onLaunch={start}
           reqShipRight={reqShipRight} respShipLeft={respShipLeft}
           simpleMode={simpleMode}
         />
@@ -1270,27 +1358,27 @@ export default function App() {
 
         {/* Request ship */}
         <div style={reqShipStyle}><ShipSVG /></div>
-        {frame.ship === "req" && (
+        {frame.phase === "req-sail" && (
           <div style={{
             ...labelBase,
             left: reqShipRight ? "76%" : "3%",
             transition: frame.phase === "req-sail" && reqShipRight ? "left 4700ms cubic-bezier(0.3,0.05,0.45,1)" : "none",
           }}>
-            <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>お願いを送信中</div>
+            <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>リクエストを送信中</div>
             {!simpleMode && <div style={{ fontSize: "9px", color: "#B89A6D", letterSpacing: "0.12em", fontFamily: "monospace" }}>REQUEST</div>}
           </div>
         )}
 
         {/* Response ship */}
         <div style={respShipStyle}><ShipSVG flip /></div>
-        {frame.ship === "resp" && (
+        {frame.phase === "resp-sail" && (
           <div style={{
             ...labelBase,
             left: respShipLeft ? "3%" : "76%",
             transition: frame.phase === "resp-sail" && respShipLeft ? "left 4700ms cubic-bezier(0.3,0.05,0.45,1)" : "none",
           }}>
-            <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>返事を送信中</div>
-            {!simpleMode && <div style={{ fontSize: "9px", color: "#789D99", letterSpacing: "0.12em", fontFamily: "monospace" }}>RESPONSE / 200 OK</div>}
+            <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>レスポンスを送信中</div>
+            <div style={{ fontSize: "8px", color: "#789D99", letterSpacing: "0.1em", fontFamily: "monospace" }}>通信モデル</div>
           </div>
         )}
       </main>
@@ -1303,6 +1391,12 @@ export default function App() {
         display: "flex", alignItems: "center",
         padding: "0 16px", gap: "6px",
       }}>
+        {frame.phase === "idle" ? (
+          <div style={{ width: "100%", textAlign: "center", fontSize: "10px", color: "#9CA8AD", opacity: 0.65 }}>
+            まず中央の「通信の旅をはじめる」を押してください
+          </div>
+        ) : (
+          <>
         <button onClick={() => goTo(frameIdx - 1)} disabled={frameIdx <= 0} style={ctrlBtnSt(frameIdx <= 0)}>
           <SkipBack size={12} />
         </button>
@@ -1359,10 +1453,12 @@ export default function App() {
             </button>
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* ── VOYAGE LOG ── */}
-      <VoyageLog open={logOpen} frameIdx={frameIdx} simpleMode={simpleMode} packet={packet} webDemo={isWebDemo()} />
+      <VoyageLog open={logOpen} frameIdx={frameIdx} simpleMode={simpleMode} packet={packet} webDemo={webDemo} />
 
       <style>{`
         @keyframes fadeSlide {
