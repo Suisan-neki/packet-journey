@@ -75,7 +75,7 @@ const OSI: OsiLayerDef[] = [
   {
     lbl: "L7", name: "Application", nameJa: "アプリケーション",
     roleJa: "手紙を書く",
-    descJa: "アプリケーションが、相手に伝えたいメッセージの本体を作成します。今回は「サーバーの状態を教えて」という手紙です。",
+    descJa: "アプリケーションが、相手に伝えたいメッセージの本体を作成します。今回は「GET /health」というリクエストです。",
     techLabel: "Application / L7",
   },
   {
@@ -140,11 +140,11 @@ const DEFAULT_PACKET: PacketInfo = {
 const MSG_SIMPLE: Record<string, string[]> = {
   creq:  ["手紙を書きました","共通言語に翻訳します","会話の窓口を開きます",
           "担当部署ラベルを貼りました（52499→8080）","宛先の住所を書きました（192.168.1.50→.1.10）","次の経由地を記しました","電気信号・電波に変えて送り出します"],
-  srecv: ["「状態を教えて」を取り出しました","データ形式を確認します","会話のつながりを確認します",
+  srecv: ["「GET /health」を取り出しました","データ形式を確認します","会話のつながりを確認します",
           "アプリ番号を確認します","端末の住所を確認します","配送情報を確認します（XDP済）","信号を受け取りました"],
-  sresp: ["「正常です」という返事を書きました","共通言語に翻訳します","会話の窓口を開きます",
+  sresp: ["「200 OK」を生成しました","共通言語に翻訳します","会話の窓口を開きます",
           "担当部署ラベルを貼りました（8080→52499）","宛先の住所を書きました（.1.10→.1.50）","次の経由地を記しました","電気信号・電波に変えて送り出します"],
-  crecv: ["「正常です」という返事を受け取りました","データ形式を確認します","会話のつながりを確認します",
+  crecv: ["「200 OK」を受け取りました","データ形式を確認します","会話のつながりを確認します",
           "アプリ番号を確認します","端末の住所を確認します","配送情報を確認します","信号を受け取りました"],
 };
 
@@ -187,7 +187,7 @@ const FRAMES: Frame[] = [
   fr("req-l1",   "電気信号として送り出す",   "req-gen",  6,   null, "down",null, "none","none",   false,false,false, 640),
   fr("req-sail", "お願いを送信中",           "req-sail", null,null, null,null,   "req","none",    false,false,false, 4700),
   fr("xdp-chk",  "入口で確認中...",          "xdp",      null,5,    null,null,   "req","checking",false,false,false, 950),
-  fr("xdp-pass", "通してよい（確認完了）",   "xdp",      null,5,    null,null,   "req","passed",  false,false,false, 1700),
+  fr("xdp-pass", "XDP_PASS（確認完了）",      "xdp",      null,5,    null,null,   "req","passed",  false,false,false, 1700),
   fr("srv-l1",   "信号を受け取る",           "srv-recv", null,6,    null,"up",   "req","passed",  false,false,false, 530),
   fr("srv-l2",   "配送情報を確認する",       "srv-recv", null,5,    null,"up",   "req","passed",  false,false,false, 530),
   fr("srv-l3",   "端末の住所を確認する",     "srv-recv", null,4,    null,"up",   "none","passed", false,false,false, 530),
@@ -506,7 +506,7 @@ function PacketEncap({ cLayer, sLayer, phase, simpleMode, packet }: {
   if (activeIdx === null || (!isSending && !isReceiving)) return null;
 
   const isResp = phase === "resp-gen" || phase === "cli-recv";
-  const payloadText = isResp ? "正常です" : "状態を教えて";
+  const payloadText = isResp ? "200 OK" : "GET /health";
 
   type Layer = { labelSimple: string; labelTech: string; value: string; color: string };
   const layers: Layer[] = [];
@@ -668,7 +668,7 @@ function SeaCenter({
             サーバーはお願いを処理し、<br />成功したことを表す返事を作ります。
           </div>
           <div style={{ padding: "8px 12px", border: "1px solid rgba(184,154,109,0.35)", display: "inline-block" }}>
-            <div style={{ fontSize: "12px", color: "#B89A6D" }}>正常です</div>
+            <div style={{ fontSize: "12px", color: "#B89A6D", fontFamily: "monospace" }}>200 OK</div>
             {!simpleMode && (
               <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.65, marginTop: "2px" }}>
                 HTTP 200 OK — お願いを正常に受け取り、処理できたことを表します。
@@ -803,7 +803,7 @@ function SeaCenter({
           fontSize: "12px", color: "#9CA8AD", fontWeight: 300,
           lineHeight: 2.1, textAlign: "center", marginBottom: "36px", maxWidth: "280px",
         }}>
-          「状態確認」を押すと、サーバーへお願いが送られ、その返事が戻ってきます。<br />
+          「状態確認」を押すと、HTTP リクエストが送信され、レスポンスが返ります。<br />
           普段は見えない通信の中身を、船旅として一緒に追いかけます。
         </p>
         <button onClick={onLaunch}
@@ -879,16 +879,16 @@ function SeaCenter({
           fontFamily: "'Noto Serif JP', serif", fontSize: "clamp(14px, 1.4vw, 18px)",
           fontWeight: 300, color: "#F1EFE8", lineHeight: 1.9, textAlign: "center", marginBottom: "14px",
         }}>
-          お願いと返事の往復が完了しました
+          リクエストとレスポンスの往復が完了しました
         </p>
         <div style={{
           fontSize: "11px", color: "#9CA8AD", lineHeight: 2, textAlign: "left",
           maxWidth: "280px", marginBottom: "14px",
         }}>
           <div>あなたがしたこと：<span style={{ color: "#F1EFE8" }}>状態確認を押した</span></div>
-          <div>サーバーへのお願い：<span style={{ color: "#F1EFE8" }}>状態を教えて</span></div>
-          <div>入口での確認：<span style={{ color: "#F1EFE8" }}>届いた通信を確認し、中へ通した</span></div>
-          <div>戻ってきた返事：<span style={{ color: "#B89A6D" }}>正常です</span></div>
+          <div>送信したリクエスト：<span style={{ color: "#F1EFE8", fontFamily: "monospace" }}>GET /health</span></div>
+          <div>入口での確認：<span style={{ color: "#F1EFE8" }}>パケットを検査し、<span style={{ fontFamily: "monospace" }}>{packet.xdpAction}</span> で通過させた</span></div>
+          <div>受信したレスポンス：<span style={{ color: "#B89A6D", fontFamily: "monospace" }}>200 OK</span></div>
         </div>
         <p style={{ fontSize: "10px", color: "#9CA8AD", lineHeight: 1.8, textAlign: "center", fontWeight: 300 }}>
           画面上のひとつの操作も、届け先の情報を付けながら<br />
@@ -977,11 +977,11 @@ function VoyageLog({ open, frameIdx, simpleMode, packet, webDemo }: {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px", marginBottom: "14px" }}>
             {[
-              ["送ったお願い",   "状態を教えて",     null],
-              ["戻ってきた返事", "正常です",          null],
+              ["リクエスト",   "GET /health",     null],
+              ["レスポンス",   "200 OK",           null],
               [`担当部署ラベル（L4・${webDemo ? "デモ" : "観測"}）`, `${packet.srcPort} → ${packet.dstPort}`, `${packet.protocol} ポート番号`],
               [`宛先の住所（L3・${webDemo ? "デモ" : "観測"}）`, `${packet.srcIp} →\n${packet.dstIp}`, "IPアドレス"],
-              ["入口での確認結果", "通してよい",      simpleMode ? null : packet.xdpAction],
+              ["入口での確認結果", packet.xdpAction, null],
               ["往復時間",         "—",               "未計測"],
             ].map(([k, v, sub]) => (
               <div key={k as string}>
@@ -1010,7 +1010,7 @@ function VoyageLog({ open, frameIdx, simpleMode, packet, webDemo }: {
                   <div>近くの配送情報</div>
                   <div style={{ paddingLeft: "12px" }}>└ 端末の住所</div>
                   <div style={{ paddingLeft: "24px" }}>└ アプリ番号</div>
-                  <div style={{ paddingLeft: "36px" }}>└ 状態を教えて</div>
+                  <div style={{ paddingLeft: "36px" }}>└ GET /health</div>
                 </>
               ) : (
                 <>
