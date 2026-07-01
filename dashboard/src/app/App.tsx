@@ -177,15 +177,15 @@ function fr(
 }
 
 const PACE = {
-  layer: 950,
-  conceptualLayer: 800,
-  physicalLayer: 900,
-  receiveLayer: 800,
-  receiveFinal: 1000,
+  layer: 2000,
+  conceptualLayer: 2000,
+  physicalLayer: 2000,
+  receiveLayer: 2000,
+  receiveFinal: 2000,
   sailing: 4700,
-  xdpChecking: 1600,
-  xdpResult: 2600,
-  serverProcessing: 2600,
+  xdpChecking: 2500,
+  xdpResult: 4000,
+  serverProcessing: 3200,
 } as const;
 
 const FRAMES: Frame[] = [
