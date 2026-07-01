@@ -176,41 +176,53 @@ function fr(
   return { id, labelJa, phase, cLayer: cL, sLayer: sL, cDir: cD, sDir: sD, ship, xdp, srvProc, respReady, cliDone, dur };
 }
 
+const PACE = {
+  layer: 950,
+  conceptualLayer: 800,
+  physicalLayer: 900,
+  receiveLayer: 800,
+  receiveFinal: 1000,
+  sailing: 4700,
+  xdpChecking: 1600,
+  xdpResult: 2600,
+  serverProcessing: 2600,
+} as const;
+
 const FRAMES: Frame[] = [
   fr("idle",     "待機中",                  "idle",     null,null, null,null,   "none","none",   false,false,false, 0),
-  fr("req-l7",   "リクエストを作る",         "req-gen",  0,   null, "down",null, "none","none",   false,false,false, 640),
-  fr("req-l6",   "形式を整える",             "req-gen",  1,   null, "down",null, "none","none",   false,false,false, 560),
-  fr("req-l5",   "つながりを記録する",       "req-gen",  2,   null, "down",null, "none","none",   false,false,false, 560),
-  fr("req-l4",   "アプリ番号を付ける",       "req-gen",  3,   null, "down",null, "none","none",   false,false,false, 560),
-  fr("req-l3",   "端末の住所を付ける",       "req-gen",  4,   null, "down",null, "none","none",   false,false,false, 560),
-  fr("req-l2",   "配送情報を付ける",         "req-gen",  5,   null, "down",null, "none","none",   false,false,false, 560),
-  fr("req-l1",   "電気信号として送り出す",   "req-gen",  6,   null, "down",null, "none","none",   false,false,false, 640),
-  fr("req-sail", "リクエストを送信中",       "req-sail", null,null, null,null,   "req","none",    false,false,false, 4700),
-  fr("xdp-chk",  "入口で確認中...",          "xdp",      null,5,    null,null,   "req","checking",false,false,false, 950),
-  fr("xdp-pass", "XDP_PASS（確認完了）",      "xdp",      null,5,    null,null,   "req","passed",  false,false,false, 1700),
-  fr("srv-l1",   "信号を受け取る",           "srv-recv", null,6,    null,"up",   "req","passed",  false,false,false, 530),
-  fr("srv-l2",   "配送情報を確認する",       "srv-recv", null,5,    null,"up",   "req","passed",  false,false,false, 530),
-  fr("srv-l3",   "端末の住所を確認する",     "srv-recv", null,4,    null,"up",   "none","passed", false,false,false, 530),
-  fr("srv-l4",   "アプリ番号を確認する",     "srv-recv", null,3,    null,"up",   "none","passed", false,false,false, 530),
-  fr("srv-l5",   "つながりを確認する",       "srv-recv", null,2,    null,"up",   "none","passed", false,false,false, 530),
-  fr("srv-l6",   "形式を確認する",           "srv-recv", null,1,    null,"up",   "none","passed", false,false,false, 530),
-  fr("srv-l7",   "リクエストを取り出す",     "srv-recv", null,0,    null,"up",   "none","passed", false,false,false, 720),
-  fr("srv-proc", "サーバーが処理中",         "srv-proc", null,0,    null,null,   "none","none",   true,false,false,  2400),
-  fr("resp-l7",  "レスポンスを作る",         "resp-gen", null,0,    null,"down", "resp","none",   false,true,false,  580),
-  fr("resp-l6",  "形式を整える",             "resp-gen", null,1,    null,"down", "resp","none",   false,true,false,  540),
-  fr("resp-l5",  "つながりを記録する",       "resp-gen", null,2,    null,"down", "resp","none",   false,true,false,  540),
-  fr("resp-l4",  "アプリ番号を付ける",       "resp-gen", null,3,    null,"down", "resp","none",   false,true,false,  540),
-  fr("resp-l3",  "端末の住所を付ける",       "resp-gen", null,4,    null,"down", "resp","none",   false,true,false,  540),
-  fr("resp-l2",  "配送情報を付ける",         "resp-gen", null,5,    null,"down", "resp","none",   false,true,false,  540),
-  fr("resp-l1",  "電気信号として送り出す",   "resp-gen", null,6,    null,"down", "resp","none",   false,true,false,  600),
-  fr("resp-sail","レスポンスを送信中",       "resp-sail",null,null, null,null,   "resp","none",   false,true,false,  4700),
-  fr("cli-l1",   "信号を受け取る",           "cli-recv", 6,   null, "up",null,   "resp","none",   false,true,false,  530),
-  fr("cli-l2",   "配送情報を確認する",       "cli-recv", 5,   null, "up",null,   "none","none",   false,true,false,  530),
-  fr("cli-l3",   "端末の住所を確認する",     "cli-recv", 4,   null, "up",null,   "none","none",   false,true,false,  530),
-  fr("cli-l4",   "アプリ番号を確認する",     "cli-recv", 3,   null, "up",null,   "none","none",   false,true,false,  530),
-  fr("cli-l5",   "つながりを確認する",       "cli-recv", 2,   null, "up",null,   "none","none",   false,true,false,  530),
-  fr("cli-l6",   "形式を確認する",           "cli-recv", 1,   null, "up",null,   "none","none",   false,true,false,  530),
-  fr("cli-l7",   "レスポンスを受け取る",     "cli-recv", 0,   null, "up",null,   "none","none",   false,true,true,   800),
+  fr("req-l7",   "リクエストを作る",         "req-gen",  0,   null, "down",null, "none","none",   false,false,false, PACE.layer),
+  fr("req-l6",   "形式を整える",             "req-gen",  1,   null, "down",null, "none","none",   false,false,false, PACE.conceptualLayer),
+  fr("req-l5",   "つながりを記録する",       "req-gen",  2,   null, "down",null, "none","none",   false,false,false, PACE.conceptualLayer),
+  fr("req-l4",   "アプリ番号を付ける",       "req-gen",  3,   null, "down",null, "none","none",   false,false,false, PACE.layer),
+  fr("req-l3",   "端末の住所を付ける",       "req-gen",  4,   null, "down",null, "none","none",   false,false,false, PACE.layer),
+  fr("req-l2",   "配送情報を付ける",         "req-gen",  5,   null, "down",null, "none","none",   false,false,false, PACE.layer),
+  fr("req-l1",   "電気信号として送り出す",   "req-gen",  6,   null, "down",null, "none","none",   false,false,false, PACE.physicalLayer),
+  fr("req-sail", "リクエストを送信中",       "req-sail", null,null, null,null,   "req","none",    false,false,false, PACE.sailing),
+  fr("xdp-chk",  "入口で確認中...",          "xdp",      null,5,    null,null,   "req","checking",false,false,false, PACE.xdpChecking),
+  fr("xdp-pass", "XDP_PASS（確認完了）",      "xdp",      null,5,    null,null,   "req","passed",  false,false,false, PACE.xdpResult),
+  fr("srv-l1",   "信号を受け取る",           "srv-recv", null,6,    null,"up",   "req","passed",  false,false,false, PACE.receiveLayer),
+  fr("srv-l2",   "配送情報を確認する",       "srv-recv", null,5,    null,"up",   "req","passed",  false,false,false, PACE.receiveLayer),
+  fr("srv-l3",   "端末の住所を確認する",     "srv-recv", null,4,    null,"up",   "none","passed", false,false,false, PACE.receiveLayer),
+  fr("srv-l4",   "アプリ番号を確認する",     "srv-recv", null,3,    null,"up",   "none","passed", false,false,false, PACE.receiveLayer),
+  fr("srv-l5",   "つながりを確認する",       "srv-recv", null,2,    null,"up",   "none","passed", false,false,false, PACE.receiveLayer),
+  fr("srv-l6",   "形式を確認する",           "srv-recv", null,1,    null,"up",   "none","passed", false,false,false, PACE.receiveLayer),
+  fr("srv-l7",   "リクエストを取り出す",     "srv-recv", null,0,    null,"up",   "none","passed", false,false,false, PACE.receiveFinal),
+  fr("srv-proc", "サーバーが処理中",         "srv-proc", null,0,    null,null,   "none","none",   true,false,false, PACE.serverProcessing),
+  fr("resp-l7",  "レスポンスを作る",         "resp-gen", null,0,    null,"down", "resp","none",   false,true,false, PACE.layer),
+  fr("resp-l6",  "形式を整える",             "resp-gen", null,1,    null,"down", "resp","none",   false,true,false, PACE.conceptualLayer),
+  fr("resp-l5",  "つながりを記録する",       "resp-gen", null,2,    null,"down", "resp","none",   false,true,false, PACE.conceptualLayer),
+  fr("resp-l4",  "アプリ番号を付ける",       "resp-gen", null,3,    null,"down", "resp","none",   false,true,false, PACE.layer),
+  fr("resp-l3",  "端末の住所を付ける",       "resp-gen", null,4,    null,"down", "resp","none",   false,true,false, PACE.layer),
+  fr("resp-l2",  "配送情報を付ける",         "resp-gen", null,5,    null,"down", "resp","none",   false,true,false, PACE.layer),
+  fr("resp-l1",  "電気信号として送り出す",   "resp-gen", null,6,    null,"down", "resp","none",   false,true,false, PACE.physicalLayer),
+  fr("resp-sail","レスポンスを送信中",       "resp-sail",null,null, null,null,   "resp","none",   false,true,false, PACE.sailing),
+  fr("cli-l1",   "信号を受け取る",           "cli-recv", 6,   null, "up",null,   "resp","none",   false,true,false, PACE.receiveLayer),
+  fr("cli-l2",   "配送情報を確認する",       "cli-recv", 5,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
+  fr("cli-l3",   "端末の住所を確認する",     "cli-recv", 4,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
+  fr("cli-l4",   "アプリ番号を確認する",     "cli-recv", 3,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
+  fr("cli-l5",   "つながりを確認する",       "cli-recv", 2,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
+  fr("cli-l6",   "形式を確認する",           "cli-recv", 1,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
+  fr("cli-l7",   "レスポンスを受け取る",     "cli-recv", 0,   null, "up",null,   "none","none",   false,true,true,   PACE.receiveFinal),
   fr("complete", "往復が完了しました",        "complete", null,null, null,null,   "none","none",   false,true,true,   0),
 ];
 
@@ -832,7 +844,7 @@ function SeaCenter({
           opacity={reqLineActive ? "0.4" : "0.1"} style={{ transition: "opacity 0.8s" }} />
         <line x1="2%" y1="72%" x2="98%" y2="72%" stroke="#B89A6D" strokeWidth="1.2"
           strokeDasharray="2000" strokeDashoffset={isReqSail && reqShipRight ? "0" : "2000"} opacity="0.5"
-          style={{ transition: isReqSail && reqShipRight ? "stroke-dashoffset 4700ms linear" : "stroke-dashoffset 0ms" }} />
+          style={{ transition: isReqSail && reqShipRight ? `stroke-dashoffset ${PACE.sailing}ms linear` : "stroke-dashoffset 0ms" }} />
         {reqLineActive && (
           <>
             <line x1="30%" y1="70.2%" x2="32%" y2="72%" stroke="#789D99" strokeWidth="1" opacity="0.28" />
@@ -845,7 +857,7 @@ function SeaCenter({
           opacity={respLineActive ? "0.38" : "0.07"} style={{ transition: "opacity 0.8s" }} />
         <line x1="98%" y1="75%" x2="2%" y2="75%" stroke="#789D99" strokeWidth="1.2"
           strokeDasharray="2000" strokeDashoffset={isRespSail && respShipLeft ? "0" : "2000"} opacity="0.45"
-          style={{ transition: isRespSail && respShipLeft ? "stroke-dashoffset 4700ms linear" : "stroke-dashoffset 0ms" }} />
+          style={{ transition: isRespSail && respShipLeft ? `stroke-dashoffset ${PACE.sailing}ms linear` : "stroke-dashoffset 0ms" }} />
         {respLineActive && (
           <>
             <line x1="70%" y1="73.2%" x2="68%" y2="75%" stroke="#789D99" strokeWidth="1" opacity="0.24" />
@@ -1207,13 +1219,6 @@ export default function App() {
     }
   }, [frameIdx, frame.id]);
 
-  // Open log on complete
-  useEffect(() => {
-    if (!isComplete) return;
-    const timer = window.setTimeout(() => setLogOpen(true), 600);
-    return () => window.clearTimeout(timer);
-  }, [isComplete]);
-
   function goTo(idx: number) {
     const t = Math.max(0, Math.min(FRAMES.length - 1, idx));
     if (t >= REQ_SAIL_IDX + 1)  setReqShipRight(true); else setReqShipRight(false);
@@ -1244,14 +1249,14 @@ export default function App() {
   const reqShipStyle: CSSProperties = {
     position: "absolute", width: "200px", height: "64px",
     bottom: "7%", left: reqShipRight ? "76%" : "3%",
-    transition: frame.phase === "req-sail" && reqShipRight ? "left 4700ms cubic-bezier(0.3,0.05,0.45,1)" : "none",
+    transition: frame.phase === "req-sail" && reqShipRight ? `left ${PACE.sailing}ms cubic-bezier(0.3,0.05,0.45,1)` : "none",
     zIndex: 12, opacity: frame.ship === "req" ? 1 : 0, pointerEvents: "none",
   };
 
   const respShipStyle: CSSProperties = {
     position: "absolute", width: "200px", height: "64px",
     bottom: "7%", left: respShipLeft ? "3%" : "76%",
-    transition: frame.phase === "resp-sail" && respShipLeft ? "left 4700ms cubic-bezier(0.3,0.05,0.45,1)" : "none",
+    transition: frame.phase === "resp-sail" && respShipLeft ? `left ${PACE.sailing}ms cubic-bezier(0.3,0.05,0.45,1)` : "none",
     zIndex: 12, opacity: frame.ship === "resp" ? 1 : 0, pointerEvents: "none",
   };
 
@@ -1362,7 +1367,7 @@ export default function App() {
           <div style={{
             ...labelBase,
             left: reqShipRight ? "76%" : "3%",
-            transition: frame.phase === "req-sail" && reqShipRight ? "left 4700ms cubic-bezier(0.3,0.05,0.45,1)" : "none",
+            transition: frame.phase === "req-sail" && reqShipRight ? `left ${PACE.sailing}ms cubic-bezier(0.3,0.05,0.45,1)` : "none",
           }}>
             <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>リクエストを送信中</div>
             {!simpleMode && <div style={{ fontSize: "9px", color: "#B89A6D", letterSpacing: "0.12em", fontFamily: "monospace" }}>REQUEST</div>}
@@ -1375,7 +1380,7 @@ export default function App() {
           <div style={{
             ...labelBase,
             left: respShipLeft ? "3%" : "76%",
-            transition: frame.phase === "resp-sail" && respShipLeft ? "left 4700ms cubic-bezier(0.3,0.05,0.45,1)" : "none",
+            transition: frame.phase === "resp-sail" && respShipLeft ? `left ${PACE.sailing}ms cubic-bezier(0.3,0.05,0.45,1)` : "none",
           }}>
             <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>レスポンスを送信中</div>
             <div style={{ fontSize: "8px", color: "#789D99", letterSpacing: "0.1em", fontFamily: "monospace" }}>通信モデル</div>
@@ -1438,19 +1443,19 @@ export default function App() {
             </button>
           ))}
 
-          {/* Log toggle */}
-          <button
-            onClick={() => setLogOpen(o => !o)}
-            style={{ ...ctrlBtnSt(false), display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", marginLeft: "6px" }}>
-            {logOpen ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
-            <span style={{ fontSize: "9px", letterSpacing: "0.1em" }}>航海記録</span>
-          </button>
-
           {isComplete && (
-            <button onClick={start} style={{ ...ctrlBtnSt(false), display: "flex", alignItems: "center", gap: "4px", padding: "4px 10px" }}>
-              <RotateCcw size={11} />
-              <span style={{ fontSize: "9px" }}>もう一度</span>
-            </button>
+            <>
+              <button
+                onClick={() => setLogOpen(o => !o)}
+                style={{ ...ctrlBtnSt(false), display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", marginLeft: "6px" }}>
+                {logOpen ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
+                <span style={{ fontSize: "9px", letterSpacing: "0.1em" }}>詳細を見る</span>
+              </button>
+              <button onClick={start} style={{ ...ctrlBtnSt(false), display: "flex", alignItems: "center", gap: "4px", padding: "4px 10px" }}>
+                <RotateCcw size={11} />
+                <span style={{ fontSize: "9px" }}>もう一度</span>
+              </button>
+            </>
           )}
         </div>
           </>
