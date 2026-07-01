@@ -1,0 +1,48 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=Noto+Sans+JP:wght@300;400;500&family=Noto+Serif+JP:wght@300;400&display=swap");
+
+:root {
+  color-scheme: dark;
+  background: #0b2233;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}
+
+svg {
+  display: block;
+}
+
+@media (max-width: 760px) {
+  body {
+    overflow-x: auto;
+  }
+
+  #root {
+    min-width: 760px;
+  }
+}
