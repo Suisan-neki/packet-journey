@@ -61,63 +61,64 @@ interface Frame {
 interface OsiLayerDef {
   lbl: string;
   name: string;
+  nameJa: string;
   roleJa: string;
   descJa: string;
   techLabel: string;
-  valueReqJa?: string;
+  valueReqJa?: string | null;
   valueTech?: string;
-  transparent?: boolean; // L5/L6: TCP/IPでアプリが担当
+  transparent?: boolean;
   hasXdp?: boolean;
 }
 
 const OSI: OsiLayerDef[] = [
   {
-    lbl: "L7", name: "Application",
-    roleJa: "送りたい内容を作る",
-    descJa: "今回は「サーバーの状態を教えて」というお願いを作ります。",
+    lbl: "L7", name: "Application", nameJa: "アプリケーション",
+    roleJa: "手紙を書く",
+    descJa: "アプリケーションが、相手に伝えたいメッセージの本体を作成します。今回は「サーバーの状態を教えて」という手紙です。",
     techLabel: "Application / L7",
   },
   {
-    lbl: "L6", name: "Presentation",
-    roleJa: "相手が読める形に整える",
-    descJa: "文字やデータを、送受信できる形式にします。",
+    lbl: "L6", name: "Presentation", nameJa: "プレゼンテーション",
+    roleJa: "共通言語に翻訳する",
+    descJa: "人間が読める文字を、コンピューターが理解できる共通のデータ形式（バイト列など）に変換します。",
     techLabel: "Presentation / L6",
     transparent: true,
   },
   {
-    lbl: "L5", name: "Session",
-    roleJa: "会話のつながりを管理する",
-    descJa: "どの通信の続きなのかを管理します。",
+    lbl: "L5", name: "Session", nameJa: "セッション",
+    roleJa: "会話の窓口を開く",
+    descJa: "通信が途切れないように、相手との会話の開始から終了までの手順を取り決めます。",
     techLabel: "Session / L5",
     transparent: true,
   },
   {
-    lbl: "L4", name: "Transport",
-    roleJa: "届け先のアプリを決める",
-    descJa: "端末の中のどのアプリへ渡すか、番号を付けて区別します。",
+    lbl: "L4", name: "Transport", nameJa: "トランスポート",
+    roleJa: "担当部署のラベルを貼る",
+    descJa: "サーバーの「どのアプリ」に届けるかを指定します。このラベルがポート番号です。",
     techLabel: "TCP・ポート番号 / L4",
     valueReqJa: "52499 → 8080",
     valueTech: "ポート 52499 → 8080",
   },
   {
-    lbl: "L3", name: "Network",
-    roleJa: "届け先の端末を決める",
-    descJa: "ネットワーク上のどのコンピューターへ届けるか、住所を付けます。",
+    lbl: "L3", name: "Network", nameJa: "ネットワーク",
+    roleJa: "宛先の住所を書く",
+    descJa: "ネットワーク上の「どのコンピューター」に届けるかを指定します。この住所がIPアドレスです。",
     techLabel: "IPアドレス / L3",
     valueReqJa: null,
     valueTech: "192.168.1.50 → 192.168.1.10",
   },
   {
-    lbl: "L2", name: "Data Link",
-    roleJa: "次に渡す機器を決める",
-    descJa: "同じネットワーク内で、次にどの機器へ渡すかを決めます。",
+    lbl: "L2", name: "Data Link", nameJa: "データリンク",
+    roleJa: "次の経由地を記す",
+    descJa: "最終目的地へ向かうために、まずは「次にバケツリレーする隣の機器」を指定します。これがMACアドレスです。",
     techLabel: "Ethernet・MACアドレス / L2",
     hasXdp: true,
   },
   {
-    lbl: "L1", name: "Physical",
-    roleJa: "電気・光・電波に変える",
-    descJa: "最後に、ケーブルや無線を通れる信号へ変換します。",
+    lbl: "L1", name: "Physical", nameJa: "フィジカル",
+    roleJa: "物理的な波に乗せる",
+    descJa: "すべての封筒を重ねた荷物を、ケーブルの電気信号やWi-Fiの電波に変換して送り出します。",
     techLabel: "Physical / L1",
   },
 ];
@@ -137,13 +138,13 @@ const DEFAULT_PACKET: PacketInfo = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MSG_SIMPLE: Record<string, string[]> = {
-  creq:  ["お願いを作りました","送れる形式に変えます","通信のつながりを記録します",
-          "届け先のアプリ番号を付けます","届け先の端末の住所を付けます","次に渡す機器の情報を付けます","電気信号として送り出します"],
-  srecv: ["「状態を教えて」を取り出しました","データ形式を確認します","通信のつながりを確認します",
-          "アプリ番号を確認します","端末の住所を確認します","配送情報を確認します","信号を受け取りました"],
-  sresp: ["「正常です」という返事を作りました","送れる形式に変えます","通信のつながりを記録します",
-          "届け先のアプリ番号を付けます","届け先の端末の住所を付けます","次に渡す機器の情報を付けます","電気信号として送り出します"],
-  crecv: ["「正常です」という返事を受け取りました","データ形式を確認します","通信のつながりを確認します",
+  creq:  ["手紙を書きました","共通言語に翻訳します","会話の窓口を開きます",
+          "担当部署ラベルを貼りました（52499→8080）","宛先の住所を書きました（192.168.1.50→.1.10）","次の経由地を記しました","電気信号・電波に変えて送り出します"],
+  srecv: ["「状態を教えて」を取り出しました","データ形式を確認します","会話のつながりを確認します",
+          "アプリ番号を確認します","端末の住所を確認します","配送情報を確認します（XDP済）","信号を受け取りました"],
+  sresp: ["「正常です」という返事を書きました","共通言語に翻訳します","会話の窓口を開きます",
+          "担当部署ラベルを貼りました（8080→52499）","宛先の住所を書きました（.1.10→.1.50）","次の経由地を記しました","電気信号・電波に変えて送り出します"],
+  crecv: ["「正常です」という返事を受け取りました","データ形式を確認します","会話のつながりを確認します",
           "アプリ番号を確認します","端末の住所を確認します","配送情報を確認します","信号を受け取りました"],
 };
 
@@ -290,11 +291,30 @@ function OsiRow({
       }} />
 
       {/* Content */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 8px 0 8px", minWidth: 0, gap: "2px" }}>
-        {/* Role description — Japanese, always visible, primary */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 8px 0 8px", minWidth: 0, gap: "1px" }}>
+        {/* Layer identifier: "L7 アプリケーション" */}
+        <div style={{
+          fontSize: "9px", color: "#789D99",
+          opacity: simpleMode ? (active ? 0.6 : 0.28) : (active ? 0.8 : 0.5),
+          letterSpacing: "0.05em", transition: "opacity 0.3s",
+          display: "flex", alignItems: "center", gap: "4px",
+        }}>
+          <span style={{ fontFamily: "monospace" }}>{layer.lbl}</span>
+          <span>{layer.nameJa}</span>
+          {layer.hasXdp && !simpleMode && (
+            <span style={{
+              fontSize: "7px", padding: "1px 3px",
+              border: `1px solid ${isXdpActive ? "#9A6258" : "rgba(120,157,153,0.3)"}`,
+              color: isXdpActive ? "#9A6258" : "rgba(120,157,153,0.4)",
+              letterSpacing: "0.1em", transition: "all 0.3s",
+            }}>XDP</span>
+          )}
+        </div>
+
+        {/* Role description — primary */}
         <div style={{
           fontSize: active ? "12px" : "11px",
-          color: active ? "#F1EFE8" : "rgba(241,239,232,0.65)",
+          color: active ? "#F1EFE8" : "rgba(241,239,232,0.6)",
           fontWeight: active ? 400 : 300,
           transition: "color 0.35s, font-size 0.2s",
           lineHeight: 1.3,
@@ -303,7 +323,7 @@ function OsiRow({
           {layer.roleJa}
         </div>
 
-        {/* Active: description */}
+        {/* Active: action message */}
         {active && (msgSimple || isXdpActive) && (
           <div style={{
             fontSize: "10px", color: accentColor,
@@ -312,46 +332,28 @@ function OsiRow({
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           }}>
             {isXdpActive
-              ? (xdpState === "checking" ? "確認しています..." : "通してよい")
+              ? (xdpState === "checking" ? "検問しています..." : "通過を許可")
               : msgSimple}
           </div>
         )}
 
-        {/* Active: tech detail (tech mode only) */}
+        {/* Active: tech detail (tech mode) */}
         {active && !simpleMode && msgTech && !isXdpActive && (
           <div style={{
             fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD",
-            opacity: 0.65, letterSpacing: "0.04em",
+            opacity: 0.6, letterSpacing: "0.04em",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           }}>
             {msgTech}
           </div>
         )}
 
-        {/* Transparent note for L5/L6 (tech mode when active) */}
+        {/* L5/L6 transparent note */}
         {active && layer.transparent && !simpleMode && (
           <div style={{ fontSize: "8px", color: "#9CA8AD", opacity: 0.5, lineHeight: 1.4, marginTop: "1px" }}>
             {TRANSPARENT_NOTE}
           </div>
         )}
-
-        {/* Tech label — small, dim in simple mode */}
-        <div style={{
-          fontSize: "9px", color: "#789D99",
-          opacity: simpleMode ? (active ? 0.45 : 0.2) : (active ? 0.75 : 0.45),
-          letterSpacing: "0.06em", transition: "opacity 0.3s",
-          display: "flex", alignItems: "center", gap: "5px",
-        }}>
-          {layer.techLabel}
-          {layer.hasXdp && !simpleMode && (
-            <span style={{
-              fontSize: "7px", padding: "1px 4px",
-              border: `1px solid ${isXdpActive ? "#9A6258" : "rgba(120,157,153,0.3)"}`,
-              color: isXdpActive ? "#9A6258" : "rgba(120,157,153,0.4)",
-              letterSpacing: "0.12em", transition: "all 0.3s",
-            }}>XDP</span>
-          )}
-        </div>
       </div>
 
       {/* Direction arrow */}
@@ -387,15 +389,15 @@ function PortColumn({ side, frame, simpleMode, packet }: {
 
   function getMsgs(idx: number): [string | null, string | null] {
     if (idx === 3) {
-      if (phase === "req-gen") return [MSG_SIMPLE.creq[idx], `${packet.protocol} :${packet.srcPort} → :${packet.dstPort}`];
+      if (phase === "req-gen") return [`担当部署ラベルを貼りました（${packet.srcPort}→${packet.dstPort}）`, `${packet.protocol} :${packet.srcPort} → :${packet.dstPort}`];
       if (phase === "srv-recv") return [MSG_SIMPLE.srecv[idx], `${packet.protocol} セグメント解析`];
-      if (phase === "resp-gen") return [MSG_SIMPLE.sresp[idx], `${packet.protocol} :${packet.dstPort} → :${packet.srcPort}`];
+      if (phase === "resp-gen") return [`担当部署ラベルを貼りました（${packet.dstPort}→${packet.srcPort}）`, `${packet.protocol} :${packet.dstPort} → :${packet.srcPort}`];
       if (phase === "cli-recv") return [MSG_SIMPLE.crecv[idx], `${packet.protocol} セグメント解析`];
     }
     if (idx === 4) {
-      if (phase === "req-gen") return [MSG_SIMPLE.creq[idx], `IP ${packet.srcIp} → ${packet.dstIp}`];
+      if (phase === "req-gen") return [`宛先の住所を書きました（${packet.srcIp}→${packet.dstIp}）`, `IP ${packet.srcIp} → ${packet.dstIp}`];
       if (phase === "srv-recv") return [MSG_SIMPLE.srecv[idx], "IP パケット解析"];
-      if (phase === "resp-gen") return [MSG_SIMPLE.sresp[idx], `IP ${packet.dstIp} → ${packet.srcIp}`];
+      if (phase === "resp-gen") return [`宛先の住所を書きました（${packet.dstIp}→${packet.srcIp}）`, `IP ${packet.dstIp} → ${packet.srcIp}`];
       if (phase === "cli-recv") return [MSG_SIMPLE.crecv[idx], "IP パケット解析"];
     }
     if (isClient) {
@@ -490,63 +492,67 @@ function PortColumn({ side, frame, simpleMode, packet }: {
 // PACKET ENCAPSULATION VISUALIZATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PacketEncap({ cLayer, sLayer, phase, simpleMode }: {
+function PacketEncap({ cLayer, sLayer, phase, simpleMode, packet }: {
   cLayer: number | null;
   sLayer: number | null;
   phase: Phase;
   simpleMode: boolean;
+  packet: PacketInfo;
 }) {
   const isSending   = phase === "req-gen" || phase === "resp-gen";
   const isReceiving = phase === "srv-recv" || phase === "cli-recv";
-  const activeIdx   = isSending ? cLayer ?? sLayer : sLayer ?? cLayer;
+  const activeIdx   = isSending ? (cLayer ?? sLayer) : (sLayer ?? cLayer);
 
-  if (activeIdx === null) return null;
-  if (!isSending && !isReceiving) return null;
+  if (activeIdx === null || (!isSending && !isReceiving)) return null;
 
-  // Build layer labels based on how deep we are
-  type Wrapper = { label: string; tech: string; color: string };
-  const wrappers: Wrapper[] = [];
+  const isResp = phase === "resp-gen" || phase === "cli-recv";
+  const payloadText = isResp ? "正常です" : "状態を教えて";
+
+  type Layer = { labelSimple: string; labelTech: string; value: string; color: string };
+  const layers: Layer[] = [];
+
   if (isSending) {
-    if (activeIdx >= 5) wrappers.push({ label: "近くの配送情報", tech: "Ethernet L2", color: "#789D99" });
-    if (activeIdx >= 4) wrappers.push({ label: "端末の住所",     tech: "IP L3",      color: "#789D99" });
-    if (activeIdx >= 3) wrappers.push({ label: "アプリ番号",     tech: "TCP L4",     color: "#789D99" });
-    const payload = phase === "resp-gen" ? "正常です" : "状態を教えて";
-    wrappers.push({ label: payload, tech: "Payload", color: "#B89A6D" });
+    if (activeIdx >= 5) layers.push({ labelSimple: "次の経由地の情報", labelTech: "Ethernet ヘッダ (L2)", value: "MACアドレス付与", color: "#789D99" });
+    if (activeIdx >= 4) layers.push({ labelSimple: "宛先の住所", labelTech: "IP ヘッダ (L3)", value: isResp ? `${packet.dstIp} → ${packet.srcIp}` : `${packet.srcIp} → ${packet.dstIp}`, color: "#789D99" });
+    if (activeIdx >= 3) layers.push({ labelSimple: "担当部署ラベル", labelTech: `${packet.protocol} ヘッダ (L4)`, value: isResp ? `${packet.dstPort} → ${packet.srcPort}` : `${packet.srcPort} → ${packet.dstPort}`, color: "#789D99" });
+    layers.push({ labelSimple: payloadText, labelTech: "Payload (L7)", value: "", color: "#B89A6D" });
   } else {
-    // Receiving: reverse — showing unwrapping. Show what remains
-    const isResp = phase === "cli-recv";
-    const payload = isResp ? "正常です" : "状態を教えて";
-    if (activeIdx >= 5) wrappers.push({ label: "近くの配送情報を取り出し中", tech: "Ethernet L2", color: "#789D99" });
-    if (activeIdx >= 4) wrappers.push({ label: "端末の住所を確認中",         tech: "IP L3",      color: "#789D99" });
-    if (activeIdx >= 3) wrappers.push({ label: "アプリ番号を確認中",         tech: "TCP L4",     color: "#789D99" });
-    wrappers.push({ label: payload, tech: "Payload", color: "#B89A6D" });
-    wrappers.reverse();
+    // Unwrapping — show what's been peeled so far
+    const payload: Layer = { labelSimple: payloadText, labelTech: "Payload (L7)", value: "", color: "#B89A6D" };
+    if (activeIdx <= 3) layers.push({ labelSimple: "担当部署ラベルを確認", labelTech: `${packet.protocol} ヘッダ (L4)`, value: isResp ? `${packet.dstPort} → ${packet.srcPort}` : `${packet.srcPort} → ${packet.dstPort}`, color: "#789D99" });
+    if (activeIdx <= 4) layers.push({ labelSimple: "宛先の住所を確認", labelTech: "IP ヘッダ (L3)", value: isResp ? `${packet.dstIp} → ${packet.srcIp}` : `${packet.srcIp} → ${packet.dstIp}`, color: "#789D99" });
+    if (activeIdx <= 5) layers.push({ labelSimple: "配送情報を確認", labelTech: "Ethernet ヘッダ (L2)", value: "MACアドレス確認", color: "#789D99" });
+    layers.push(payload);
   }
+
+  const outerToInner = isSending ? layers : [...layers].reverse();
 
   return (
     <div style={{ padding: "8px 12px", animation: "fadeSlide 0.3s ease" }}>
       <div style={{ fontSize: "9px", letterSpacing: "0.18em", color: "#9CA8AD", textTransform: "uppercase", marginBottom: "8px" }}>
-        {isSending ? "荷物の中身" : "取り出している情報"}
+        {isSending ? "封筒の中身（カプセル化）" : "封筒を開いていく（分解）"}
       </div>
-      {wrappers.map((w, i) => {
-        const isPayload = i === wrappers.length - 1;
+      {outerToInner.map((w, i) => {
+        const isPayload = w.color === "#B89A6D";
+        const indent = isSending ? i : outerToInner.length - 1 - i;
         return (
-          <div key={i} style={{
-            paddingLeft: `${i * 10}px`,
-            lineHeight: "1.9",
-          }}>
-            <span style={{ color: "#9CA8AD", fontSize: "10px" }}>{i > 0 ? "└ " : ""}</span>
+          <div key={i} style={{ paddingLeft: `${indent * 10}px`, lineHeight: "1.85" }}>
+            <span style={{ color: "#9CA8AD", fontSize: "10px" }}>{indent > 0 ? "└ " : ""}</span>
             <span style={{
               fontSize: isPayload ? "13px" : "11px",
-              color: isPayload ? "#B89A6D" : "rgba(241,239,232,0.7)",
+              color: isPayload ? "#B89A6D" : "rgba(241,239,232,0.75)",
               fontFamily: isPayload ? "'Noto Serif JP', serif" : "inherit",
               fontWeight: isPayload ? 400 : 300,
             }}>
-              {w.label}
+              {simpleMode ? w.labelSimple : w.labelTech}
             </span>
-            {!simpleMode && (
-              <span style={{ fontSize: "8px", color: "#9CA8AD", opacity: 0.5, marginLeft: "6px", fontFamily: "monospace" }}>
-                {w.tech}
+            {w.value && (
+              <span style={{
+                fontSize: "9px", fontFamily: "monospace",
+                color: isPayload ? "#B89A6D" : "#789D99",
+                opacity: 0.8, marginLeft: "6px",
+              }}>
+                {w.value}
               </span>
             )}
           </div>
@@ -594,13 +600,13 @@ function SeaCenter({
         <div style={{ padding: "12px 14px" }}>
           <div style={{ fontSize: "13px", color: "#F1EFE8", lineHeight: 1.6, marginBottom: "8px", fontFamily: "'Noto Serif JP', serif", fontWeight: 300 }}>
             {passed
-              ? "問題ありません。中へ通します。"
-              : "サーバーの入口で、\n通信をすばやく確認します"}
+              ? "検問を通過しました。"
+              : "カーネルの門番が検問します"}
           </div>
-          <div style={{ fontSize: "11px", color: "#9CA8AD", lineHeight: 1.8, marginBottom: "10px", whiteSpace: "pre-line" }}>
+          <div style={{ fontSize: "11px", color: "#9CA8AD", lineHeight: 1.9, marginBottom: "10px", whiteSpace: "pre-line" }}>
             {passed
-              ? "届いた通信を確認し、問題がないため\nそのままアプリへ届けます。"
-              : "サーバーは、届いた通信をアプリへ渡す前に\n確認できます。今回は問題がありません。"}
+              ? "荷物に問題がなかったため、\nサーバー内部へ進みます。"
+              : "サーバーに到着した瞬間、OSの奥深く（カーネル）で\nプログラムがすばやく荷物を検査します。\nユーザーの知らない裏側で、安全を守っています。"}
           </div>
           {passed && (
             <div style={{
@@ -609,21 +615,18 @@ function SeaCenter({
               display: "inline-block",
               marginBottom: "8px",
             }}>
-              <div style={{ fontSize: "12px", color: "#789D99", fontWeight: 400 }}>通してよい</div>
+              <div style={{ fontSize: "12px", color: "#789D99", fontWeight: 400 }}>通過を許可</div>
               {!simpleMode && (
                 <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.65, marginTop: "2px" }}>
-                  XDP_PASS
+                  XDP_PASS — 通常の処理へ進める
                 </div>
               )}
             </div>
           )}
           {!simpleMode && (
             <div>
-              <button
-                onClick={() => setXdpDetail(d => !d)}
-                style={linkBtnStyle}
-              >
-                {xdpDetail ? "▲ 閉じる" : "▼ XDPについて詳しく"}
+              <button onClick={() => setXdpDetail(d => !d)} style={linkBtnStyle}>
+                {xdpDetail ? "▲ 閉じる" : "▼ eBPF/XDPについて詳しく"}
               </button>
               {xdpDetail && (
                 <div style={{
@@ -632,18 +635,18 @@ function SeaCenter({
                   fontSize: "10px", color: "#9CA8AD", lineHeight: 1.9,
                 }}>
                   <div style={{ marginBottom: "6px" }}>
-                    <span style={{ color: "#F1EFE8" }}>XDP（eXpress Data Path）：</span><br />
-                    届いた通信を、OSの通常処理よりも早い場所で確認する仕組みです。
+                    <span style={{ color: "#F1EFE8" }}>eBPF / XDP（eXpress Data Path）：</span><br />
+                    カーネル（OSの中心部分）でプログラムを動かし、届いた通信をアプリより早い段階で検査・処理できる仕組みです。
                   </div>
-                  <div style={{ fontFamily: "monospace", fontSize: "9px", lineHeight: 2 }}>
+                  <div style={{ fontFamily: "monospace", fontSize: "9px", lineHeight: 2, marginBottom: "6px" }}>
                     通信が到着<br />
-                    ↓ ネットワーク機器<br />
-                    ↓ <span style={{ color: "#9A6258" }}>XDP ← いまここ</span><br />
-                    ↓ OSの通信処理<br />
-                    ↓ アプリ
+                    ↓ ネットワークカード<br />
+                    ↓ <span style={{ color: "#9A6258" }}>XDP ← いまここ（カーネルの門番）</span><br />
+                    ↓ カーネルのネットワーク処理<br />
+                    ↓ アプリケーション
                   </div>
-                  <div style={{ marginTop: "6px", fontSize: "9px", color: "#9CA8AD", opacity: 0.6 }}>
-                    XDP_PASS — この通信を止めず、通常の処理へ進める判断<br />
+                  <div style={{ fontSize: "9px", opacity: 0.6 }}>
+                    XDP_PASS — 通常の処理へ進める（今回はこれ）<br />
                     XDP_DROP — ここで破棄する<br />
                     XDP_REDIRECT — 別の場所へ転送する
                   </div>
@@ -711,20 +714,23 @@ function SeaCenter({
                 {TRANSPARENT_NOTE}
               </div>
             )}
-            {/* Show value in tech mode */}
-            {layer && !simpleMode && (layer.valueTech || (layer.hasXdp && xdp !== "none")) && (
-              <div style={{ marginTop: "4px", fontSize: "9px", fontFamily: "monospace", color: "#B89A6D", opacity: 0.8 }}>
-                {activeIdx === 3
-                  ? `${packet.protocol} ${isSending ? `${packet.srcPort} → ${packet.dstPort}` : `${packet.dstPort} → ${packet.srcPort}`}`
-                  : activeIdx === 4
-                    ? `${isSending ? `${packet.srcIp} → ${packet.dstIp}` : `${packet.dstIp} → ${packet.srcIp}`}`
-                    : layer.valueTech}
+            {/* Show value — always when available (port/IP are shown at the step they're added) */}
+            {layer && (layer.valueReqJa || layer.valueTech) && (
+              <div style={{ marginTop: "5px" }}>
+                <div style={{ fontSize: "10px", color: "#B89A6D", fontFamily: "monospace", letterSpacing: "0.04em" }}>
+                  {simpleMode ? (layer.valueReqJa ?? layer.valueTech) : layer.valueTech}
+                </div>
+                {!simpleMode && layer.valueReqJa && (
+                  <div style={{ fontSize: "8px", color: "#9CA8AD", opacity: 0.5, marginTop: "1px" }}>
+                    ← このステップで追加されます
+                  </div>
+                )}
               </div>
             )}
           </div>
           <PacketEncap
             cLayer={cLayer} sLayer={sLayer}
-            phase={phase} simpleMode={simpleMode}
+            phase={phase} simpleMode={simpleMode} packet={packet}
           />
         </div>
       );
@@ -973,8 +979,8 @@ function VoyageLog({ open, frameIdx, simpleMode, packet, webDemo }: {
             {[
               ["送ったお願い",   "状態を教えて",     null],
               ["戻ってきた返事", "正常です",          null],
-              [`送り先アプリ番号（${webDemo ? "デモ" : "観測"}）`, `${packet.srcPort} → ${packet.dstPort}`, `${packet.protocol} ポート番号`],
-              [`送り先の住所（${webDemo ? "デモ" : "観測"}）`, `${packet.srcIp} →\n${packet.dstIp}`, "IPアドレス"],
+              [`担当部署ラベル（L4・${webDemo ? "デモ" : "観測"}）`, `${packet.srcPort} → ${packet.dstPort}`, `${packet.protocol} ポート番号`],
+              [`宛先の住所（L3・${webDemo ? "デモ" : "観測"}）`, `${packet.srcIp} →\n${packet.dstIp}`, "IPアドレス"],
               ["入口での確認結果", "通してよい",      simpleMode ? null : packet.xdpAction],
               ["往復時間",         "—",               "未計測"],
             ].map(([k, v, sub]) => (
