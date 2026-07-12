@@ -33,6 +33,12 @@ jobs:
       - name: Build
         working-directory: dashboard
         run: npm run build
+      - name: Upload dashboard preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-preview
+          path: dashboard/dist
+          retention-days: 3
 
   xdp:
     runs-on: ubuntu-latest
