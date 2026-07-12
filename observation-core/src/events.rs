@@ -9,14 +9,22 @@ pub enum StreamEvent {
     Stats(StatsEvent),
     Sensor(SensorEvent),
     PhysicalAction(PhysicalActionEvent),
+    TrafficHealth(TrafficHealthEvent),
+    AttackState(AttackStateEvent),
+    DefenseMode(DefenseModeEvent),
     ActionCorrelated(ActionCorrelatedEvent),
     Guidance(GuidanceEvent),
     FhirSnapshot(FhirSnapshotEvent),
+    TrafficHealth(TrafficHealthEvent),
+    AttackState(AttackStateEvent),
+    DefenseMode(DefenseModeEvent),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FlowEvent {
     pub protocol: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
     pub src: String,
     pub src_port: u16,
     pub dst: String,
@@ -35,6 +43,37 @@ pub struct AlertEvent {
 pub struct StatsEvent {
     pub pps: u64,
     pub total: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub pass: u64,
+    #[serde(default)]
+    pub drop: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TrafficHealthEvent {
+    pub node_id: String,
+    pub success: bool,
+    pub latency_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_code: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AttackStateEvent {
+    pub node_id: String,
+    pub active: bool,
+    pub packets_sent: u64,
+    pub pps: u64,
+    pub target: String,
+    pub dst_port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DefenseModeEvent {
+    pub mode: String,
+    pub blocked_udp_port: u16,
 }
 
 /// ラズパイ等の物理ボタン操作（action-node から hub へ送る）。
@@ -159,6 +198,10 @@ pub fn parse_upstream_line(line: &str) -> Option<UpstreamEvent> {
     match kind {
         "flow" => Some(UpstreamEvent::Flow(FlowEvent {
             protocol: value.get("protocol")?.as_str()?.to_string(),
+            action: value
+                .get("action")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
             src: value.get("src")?.as_str()?.to_string(),
             src_port: value.get("src_port")?.as_u64()? as u16,
             dst: value.get("dst")?.as_str()?.to_string(),
@@ -175,6 +218,33 @@ pub fn parse_upstream_line(line: &str) -> Option<UpstreamEvent> {
         "stats" => Some(UpstreamEvent::Stats(StatsEvent {
             pps: value.get("pps")?.as_u64()?,
             total: value.get("total")?.as_u64()?,
+            mode: value
+                .get("mode")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            pass: value.get("pass").and_then(|v| v.as_u64()).unwrap_or_default(),
+            drop: value.get("drop").and_then(|v| v.as_u64()).unwrap_or_default(),
+        })),
+        "traffic_health" => Some(UpstreamEvent::TrafficHealth(TrafficHealthEvent {
+            node_id: value.get("node_id")?.as_str()?.to_string(),
+            success: value.get("success")?.as_bool()?,
+            latency_ms: value.get("latency_ms")?.as_u64()?,
+            status_code: value
+                .get("status_code")
+                .and_then(|v| v.as_u64())
+                .and_then(|v| u16::try_from(v).ok()),
+        })),
+        "attack_state" => Some(UpstreamEvent::AttackState(AttackStateEvent {
+            node_id: value.get("node_id")?.as_str()?.to_string(),
+            active: value.get("active")?.as_bool()?,
+            packets_sent: value.get("packets_sent")?.as_u64()?,
+            pps: value.get("pps")?.as_u64()?,
+            target: value.get("target")?.as_str()?.to_string(),
+            dst_port: u16::try_from(value.get("dst_port")?.as_u64()?).ok()?,
+        })),
+        "defense_mode" => Some(UpstreamEvent::DefenseMode(DefenseModeEvent {
+            mode: value.get("mode")?.as_str()?.to_string(),
+            blocked_udp_port: u16::try_from(value.get("blocked_udp_port")?.as_u64()?).ok()?,
         })),
         "sensor" => {
             let metric = match value.get("metric")?.as_str()? {
@@ -229,6 +299,9 @@ impl UpstreamEvent {
             Self::Stats(e) => StreamEvent::Stats(e.clone()),
             Self::Sensor(e) => StreamEvent::Sensor(e.clone()),
             Self::PhysicalAction(e) => StreamEvent::PhysicalAction(e.clone()),
+            Self::TrafficHealth(e) => StreamEvent::TrafficHealth(e.clone()),
+            Self::AttackState(e) => StreamEvent::AttackState(e.clone()),
+            Self::DefenseMode(e) => StreamEvent::DefenseMode(e.clone()),
         }
     }
 }
@@ -251,6 +324,23 @@ mod tests {
         .expect("flow");
         assert!(matches!(event, UpstreamEvent::Flow(_)));
     }
+
+    #[test]
+    fn parses_harbor_runtime_events() {
+        assert!(matches!(
+            parse_upstream_line(r#"{"type":"traffic_health","node_id":"pi-a","success":true,"latency_ms":12,"status_code":200}"#),
+            Some(UpstreamEvent::TrafficHealth(_))
+        ));
+        assert!(matches!(
+            parse_upstream_line(r#"{"type":"attack_state","node_id":"pi-a","active":true,"packets_sent":1000,"pps":1000,"target":"192.168.1.10","dst_port":4000}"#),
+            Some(UpstreamEvent::AttackState(_))
+        ));
+        assert!(matches!(
+            parse_upstream_line(r#"{"type":"defense_mode","mode":"protect","blocked_udp_port":4000}"#),
+            Some(UpstreamEvent::DefenseMode(_))
+        ));
+    }
+
 
     #[test]
     fn parses_physical_action_line() {
