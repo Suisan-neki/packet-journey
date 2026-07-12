@@ -16,6 +16,24 @@ pub const CONFIG_BLOCKED_UDP_PORT_INDEX: u32 = 1;
 pub const COUNTER_PASS_INDEX: u32 = 0;
 pub const COUNTER_DROP_INDEX: u32 = 1;
 
+pub const fn packet_action(
+    mode: u32,
+    protocol: u8,
+    dst_port: u16,
+    blocked_udp_port: u32,
+) -> u8 {
+    const IPPROTO_UDP: u8 = 17;
+
+    if mode == DEFENSE_MODE_PROTECT
+        && protocol == IPPROTO_UDP
+        && dst_port as u32 == blocked_udp_port
+    {
+        PACKET_ACTION_DROP
+    } else {
+        PACKET_ACTION_PASS
+    }
+}
+
 /// eBPFからRingBuf経由でユーザー空間へ渡すサンプルイベント。
 ///
 /// 集計値はCOUNTERS mapを正として扱う。RingBufは個々の通信を
@@ -33,4 +51,33 @@ pub struct FlowEvent {
     pub dst_port: u16,
     /// レートアラート時の1秒間の観測数。flowでは0。
     pub rate: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn monitor_never_drops_the_attack_port() {
+        assert_eq!(
+            packet_action(DEFENSE_MODE_MONITOR, 17, 4000, 4000),
+            PACKET_ACTION_PASS
+        );
+    }
+
+    #[test]
+    fn protect_drops_only_configured_udp_port() {
+        assert_eq!(
+            packet_action(DEFENSE_MODE_PROTECT, 17, 4000, 4000),
+            PACKET_ACTION_DROP
+        );
+        assert_eq!(
+            packet_action(DEFENSE_MODE_PROTECT, 17, 4001, 4000),
+            PACKET_ACTION_PASS
+        );
+        assert_eq!(
+            packet_action(DEFENSE_MODE_PROTECT, 6, 4000, 4000),
+            PACKET_ACTION_PASS
+        );
+    }
 }
