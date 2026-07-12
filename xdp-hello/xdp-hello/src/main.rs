@@ -5,7 +5,7 @@ use clap::{Parser, ValueEnum};
 #[rustfmt::skip]
 use log::{debug, warn};
 use std::mem::size_of;
- use std::time::Duration;
+use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::signal;
