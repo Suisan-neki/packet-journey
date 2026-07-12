@@ -5,11 +5,13 @@ use clap::{Parser, ValueEnum};
 #[rustfmt::skip]
 use log::{debug, warn};
 use std::mem::size_of;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::signal;
-use tokio::sync::broadcast;
+use tokio::sync::{Mutex, broadcast};
 use xdp_hello_common::{
     CONFIG_BLOCKED_UDP_PORT_INDEX, CONFIG_MODE_INDEX, COUNTER_DROP_INDEX, COUNTER_PASS_INDEX,
     DEFENSE_MODE_MONITOR, DEFENSE_MODE_PROTECT, EVENT_KIND_RATE_ALERT, FlowEvent,
@@ -30,6 +32,22 @@ impl DefenseMode {
         }
     }
 
+    fn from_u32(value: u32) -> Self {
+        if value == DEFENSE_MODE_PROTECT {
+            Self::Protect
+        } else {
+            Self::Monitor
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "monitor" => Some(Self::Monitor),
+            "protect" => Some(Self::Protect),
+            _ => None,
+        }
+    }
+
     fn as_str(self) -> &'static str {
         match self {
             Self::Monitor => "monitor",
@@ -46,6 +64,9 @@ struct Opt {
     /// Lima のポート転送で macOS ホストの同ポートに出る。
     #[clap(short, long, default_value = "127.0.0.1:9000")]
     listen: String,
+    /// 実行中にmonitor/protectを変更する制御API。
+    #[clap(long, default_value = "127.0.0.1:9020")]
+    control_listen: String,
     /// monitorは観測のみ。protectは指定UDPポートをXDP_DROPする。
     #[clap(long, value_enum, default_value = "monitor")]
     defense_mode: DefenseMode,
@@ -97,18 +118,19 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    {
-        let map = ebpf
-            .map_mut("DEFENSE_CONFIG")
-            .context("DEFENSE_CONFIG map not found")?;
-        let mut config: Array<_, u32> = Array::try_from(map)?;
-        config.set(CONFIG_MODE_INDEX, opt.defense_mode.as_u32(), 0)?;
-        config.set(
-            CONFIG_BLOCKED_UDP_PORT_INDEX,
-            u32::from(opt.blocked_udp_port),
-            0,
-        )?;
-    }
+    let mut config: Array<aya::maps::MapData, u32> = ebpf
+        .take_map("DEFENSE_CONFIG")
+        .context("DEFENSE_CONFIG map not found")?
+        .try_into()?;
+    config.set(CONFIG_MODE_INDEX, opt.defense_mode.as_u32(), 0)?;
+    config.set(
+        CONFIG_BLOCKED_UDP_PORT_INDEX,
+        u32::from(opt.blocked_udp_port),
+        0,
+    )?;
+    let config = Arc::new(Mutex::new(config));
+    let current_mode = Arc::new(AtomicU32::new(opt.defense_mode.as_u32()));
+
     println!(
         "defense mode={} blocked_udp_port={}",
         opt.defense_mode.as_str(),
@@ -120,12 +142,20 @@ async fn main() -> anyhow::Result<()> {
     let (tx, _rx) = broadcast::channel::<String>(4096);
 
     spawn_event_server(opt.listen.clone(), tx.clone()).await?;
+    spawn_control_server(
+        opt.control_listen.clone(),
+        config,
+        current_mode.clone(),
+        opt.blocked_udp_port,
+        tx.clone(),
+    )
+    .await?;
 
     let counters: PerCpuArray<_, u64> = ebpf
         .take_map("COUNTERS")
         .context("COUNTERS map not found")?
         .try_into()?;
-    spawn_stats_ticker(tx.clone(), counters, opt.defense_mode);
+    spawn_stats_ticker(tx.clone(), counters, current_mode);
 
     let ring_buf: RingBuf<_> = ebpf
         .take_map("EVENTS")
@@ -209,11 +239,94 @@ async fn spawn_event_server(listen: String, tx: broadcast::Sender<String>) -> an
     Ok(())
 }
 
+async fn spawn_control_server(
+    listen: String,
+    config: Arc<Mutex<Array<aya::maps::MapData, u32>>>,
+    current_mode: Arc<AtomicU32>,
+    blocked_udp_port: u16,
+    tx: broadcast::Sender<String>,
+) -> anyhow::Result<()> {
+    let listener = TcpListener::bind(&listen)
+        .await
+        .with_context(|| format!("failed to bind control server on {listen}"))?;
+    println!("defense control listening on {listen}");
+
+    tokio::spawn(async move {
+        loop {
+            let (socket, peer) = match listener.accept().await {
+                Ok(pair) => pair,
+                Err(error) => {
+                    warn!("defense control accept failed: {error}");
+                    continue;
+                }
+            };
+            let config = config.clone();
+            let current_mode = current_mode.clone();
+            let tx = tx.clone();
+
+            tokio::spawn(async move {
+                let (reader, mut writer) = socket.into_split();
+                let mut lines = BufReader::new(reader).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let requested = serde_json::from_str::<serde_json::Value>(&line)
+                        .ok()
+                        .and_then(|value| value.get("mode")?.as_str().map(str::to_string))
+                        .unwrap_or_else(|| line.clone());
+
+                    let Some(mode) = DefenseMode::parse(&requested) else {
+                        let _ = writer
+                            .write_all(b"{\"ok\":false,\"error\":\"mode must be monitor or protect\"}\n")
+                            .await;
+                        continue;
+                    };
+
+                    let update = {
+                        let mut config = config.lock().await;
+                        config.set(CONFIG_MODE_INDEX, mode.as_u32(), 0)
+                    };
+                    match update {
+                        Ok(()) => {
+                            current_mode.store(mode.as_u32(), Ordering::Relaxed);
+                            let event = serde_json::json!({
+                                "type": "defense_mode",
+                                "mode": mode.as_str(),
+                                "blocked_udp_port": blocked_udp_port,
+                            })
+                            .to_string();
+                            let _ = tx.send(event.clone());
+                            let response = serde_json::json!({
+                                "ok": true,
+                                "mode": mode.as_str(),
+                                "blocked_udp_port": blocked_udp_port,
+                            })
+                            .to_string();
+                            let _ = writer.write_all(response.as_bytes()).await;
+                            let _ = writer.write_all(b"\n").await;
+                            println!("defense mode changed by {peer}: {}", mode.as_str());
+                        }
+                        Err(error) => {
+                            let response = serde_json::json!({
+                                "ok": false,
+                                "error": error.to_string(),
+                            })
+                            .to_string();
+                            let _ = writer.write_all(response.as_bytes()).await;
+                            let _ = writer.write_all(b"\n").await;
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    Ok(())
+}
+
 /// 500msごとにカーネルのper-CPU counterを合算して配信する。
 fn spawn_stats_ticker(
     tx: broadcast::Sender<String>,
     counters: PerCpuArray<aya::maps::MapData, u64>,
-    mode: DefenseMode,
+    current_mode: Arc<AtomicU32>,
 ) {
     tokio::task::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(500));
@@ -229,7 +342,7 @@ fn spawn_stats_ticker(
 
             let line = serde_json::json!({
                 "type": "stats",
-                "mode": mode.as_str(),
+                "mode": DefenseMode::from_u32(current_mode.load(Ordering::Relaxed)).as_str(),
                 "pps": pps,
                 "total": total,
                 "pass": pass,

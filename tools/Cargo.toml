@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["action-node", "mock-sensor", "observation-hub"]
+members = ["action-node", "mock-sensor", "observation-hub", "traffic-node"]
 
 [workspace.package]
 edition = "2021"

@@ -48,6 +48,9 @@ impl JudgmentEngine {
             UpstreamEvent::Sensor(sensor) => self.ingest_sensor(sensor),
             UpstreamEvent::Stats(_) => Vec::new(),
             UpstreamEvent::PhysicalAction(_) => Vec::new(),
+            UpstreamEvent::TrafficHealth(_) => Vec::new(),
+            UpstreamEvent::AttackState(_) => Vec::new(),
+            UpstreamEvent::DefenseMode(_) => Vec::new(),
         }
     }
 
@@ -397,6 +400,7 @@ mod tests {
         for i in 2..12 {
             outputs.extend(engine.ingest(&UpstreamEvent::Flow(FlowEvent {
                 protocol: "TCP".to_string(),
+                action: Some("PASS".to_string()),
                 src: "10.10.0.50".to_string(),
                 src_port: 40000,
                 dst: format!("10.10.0.{i}"),
