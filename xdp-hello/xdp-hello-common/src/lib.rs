@@ -34,6 +34,21 @@ pub const fn packet_action(
     }
 }
 
+pub const ATTACK_FLOW_SAMPLE_EVERY: u64 = 64;
+
+pub const fn should_emit_flow_sample(
+    protocol: u8,
+    dst_port: u16,
+    blocked_udp_port: u32,
+    packet_count: u64,
+) -> bool {
+    const IPPROTO_UDP: u8 = 17;
+
+    protocol != IPPROTO_UDP
+        || dst_port as u32 != blocked_udp_port
+        || packet_count % ATTACK_FLOW_SAMPLE_EVERY == 1
+}
+
 /// eBPFからRingBuf経由でユーザー空間へ渡すサンプルイベント。
 ///
 /// 集計値はCOUNTERS mapを正として扱う。RingBufは個々の通信を
@@ -63,6 +78,15 @@ mod tests {
             packet_action(DEFENSE_MODE_MONITOR, 17, 4000, 4000),
             PACKET_ACTION_PASS
         );
+    }
+
+    #[test]
+    fn attack_flow_is_sampled_without_losing_kernel_counts() {
+        assert!(should_emit_flow_sample(17, 4000, 4000, 1));
+        assert!(!should_emit_flow_sample(17, 4000, 4000, 2));
+        assert!(should_emit_flow_sample(17, 4000, 4000, 65));
+        assert!(should_emit_flow_sample(6, 4000, 4000, 2));
+        assert!(should_emit_flow_sample(17, 4001, 4000, 2));
     }
 
     #[test]
