@@ -12,8 +12,8 @@ use aya_log_ebpf::{info, warn};
 use core::mem;
 use xdp_hello_common::{
     CONFIG_BLOCKED_UDP_PORT_INDEX, CONFIG_MODE_INDEX, COUNTER_DROP_INDEX, COUNTER_PASS_INDEX,
-    DEFENSE_MODE_PROTECT, EVENT_KIND_FLOW, EVENT_KIND_RATE_ALERT, FlowEvent,
-    PACKET_ACTION_DROP, PACKET_ACTION_PASS,
+    EVENT_KIND_FLOW, EVENT_KIND_RATE_ALERT, FlowEvent, PACKET_ACTION_DROP,
+    PACKET_ACTION_PASS, packet_action,
 };
 
 const ETH_HDR_LEN: usize = 14;
@@ -306,11 +306,7 @@ fn udp_action(dst_port: u16) -> u8 {
         .copied()
         .unwrap_or_default();
 
-    if mode == DEFENSE_MODE_PROTECT && u32::from(dst_port) == blocked_port {
-        PACKET_ACTION_DROP
-    } else {
-        PACKET_ACTION_PASS
-    }
+    packet_action(mode, IPPROTO_UDP, dst_port, blocked_port)
 }
 
 #[inline(always)]
