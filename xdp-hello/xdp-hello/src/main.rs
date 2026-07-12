@@ -1,18 +1,42 @@
 use anyhow::Context as _;
-use aya::maps::RingBuf;
+use aya::maps::{Array, PerCpuArray, RingBuf};
 use aya::programs::{Xdp, XdpFlags};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 #[rustfmt::skip]
 use log::{debug, warn};
 use std::mem::size_of;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tokio::sync::broadcast;
-use xdp_hello_common::{EVENT_KIND_RATE_ALERT, FlowEvent};
+use xdp_hello_common::{
+    CONFIG_BLOCKED_UDP_PORT_INDEX, CONFIG_MODE_INDEX, COUNTER_DROP_INDEX, COUNTER_PASS_INDEX,
+    DEFENSE_MODE_MONITOR, DEFENSE_MODE_PROTECT, EVENT_KIND_RATE_ALERT, FlowEvent,
+    PACKET_ACTION_DROP,
+};
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum DefenseMode {
+    Monitor,
+    Protect,
+}
+
+impl DefenseMode {
+    fn as_u32(self) -> u32 {
+        match self {
+            Self::Monitor => DEFENSE_MODE_MONITOR,
+            Self::Protect => DEFENSE_MODE_PROTECT,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Monitor => "monitor",
+            Self::Protect => "protect",
+        }
+    }
+}
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -22,6 +46,12 @@ struct Opt {
     /// Lima のポート転送で macOS ホストの同ポートに出る。
     #[clap(short, long, default_value = "127.0.0.1:9000")]
     listen: String,
+    /// monitorは観測のみ。protectは指定UDPポートをXDP_DROPする。
+    #[clap(long, value_enum, default_value = "monitor")]
+    defense_mode: DefenseMode,
+    /// protect時に遮断する負荷通信専用UDPポート。
+    #[clap(long, default_value_t = 4000)]
+    blocked_udp_port: u16,
 }
 
 #[tokio::main]
@@ -67,15 +97,35 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    {
+        let map = ebpf
+            .map_mut("DEFENSE_CONFIG")
+            .context("DEFENSE_CONFIG map not found")?;
+        let mut config: Array<_, u32> = Array::try_from(map)?;
+        config.set(CONFIG_MODE_INDEX, opt.defense_mode.as_u32(), 0)?;
+        config.set(
+            CONFIG_BLOCKED_UDP_PORT_INDEX,
+            u32::from(opt.blocked_udp_port),
+            0,
+        )?;
+    }
+    println!(
+        "defense mode={} blocked_udp_port={}",
+        opt.defense_mode.as_str(),
+        opt.blocked_udp_port
+    );
+
     // 地上へ流す NDJSON 行をブロードキャストするチャネル。
     // 1イベント = 1行。複数のダッシュボードが同時接続してもよい。
     let (tx, _rx) = broadcast::channel::<String>(4096);
 
     spawn_event_server(opt.listen.clone(), tx.clone()).await?;
 
-    // PPS 算出用の累積カウンタ（flow イベントのみ数える）。
-    let flow_total = Arc::new(AtomicU64::new(0));
-    spawn_stats_ticker(tx.clone(), flow_total.clone());
+    let counters: PerCpuArray<_, u64> = ebpf
+        .take_map("COUNTERS")
+        .context("COUNTERS map not found")?
+        .try_into()?;
+    spawn_stats_ticker(tx.clone(), counters, opt.defense_mode);
 
     let ring_buf: RingBuf<_> = ebpf
         .take_map("EVENTS")
@@ -85,7 +135,6 @@ async fn main() -> anyhow::Result<()> {
         tokio::io::unix::AsyncFd::with_interest(ring_buf, tokio::io::Interest::READABLE)?;
     {
         let tx = tx.clone();
-        let flow_total = flow_total.clone();
         tokio::task::spawn(async move {
             loop {
                 let mut guard = ring_buf.readable_mut().await.unwrap();
@@ -93,9 +142,6 @@ async fn main() -> anyhow::Result<()> {
                     match parse_flow_event(&item) {
                         Some(event) => {
                             print_flow_event(&event);
-                            if event.kind != EVENT_KIND_RATE_ALERT {
-                                flow_total.fetch_add(1, Ordering::Relaxed);
-                            }
                             // 黒い画面に出していたデータを、そのまま地上へ投函する。
                             let _ = tx.send(event_to_json(&event));
                         }
@@ -163,27 +209,46 @@ async fn spawn_event_server(listen: String, tx: broadcast::Sender<String>) -> an
     Ok(())
 }
 
-/// 500ms ごとに PPS（1秒あたり処理パケット数）と累計を stats イベントとして配信する。
-fn spawn_stats_ticker(tx: broadcast::Sender<String>, flow_total: Arc<AtomicU64>) {
+/// 500msごとにカーネルのper-CPU counterを合算して配信する。
+fn spawn_stats_ticker(
+    tx: broadcast::Sender<String>,
+    counters: PerCpuArray<aya::maps::MapData, u64>,
+    mode: DefenseMode,
+) {
     tokio::task::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(500));
-        let mut prev = flow_total.load(Ordering::Relaxed);
+        let mut previous_total = 0_u64;
+
         loop {
             interval.tick().await;
-            let total = flow_total.load(Ordering::Relaxed);
-            let delta = total.saturating_sub(prev);
-            prev = total;
-            // 500ms ぶんの観測なので 2 倍して 1 秒あたりに換算する。
-            let pps = delta * 2;
+            let pass = sum_counter(&counters, COUNTER_PASS_INDEX);
+            let drop_count = sum_counter(&counters, COUNTER_DROP_INDEX);
+            let total = pass.saturating_add(drop_count);
+            let pps = total.saturating_sub(previous_total).saturating_mul(2);
+            previous_total = total;
+
             let line = serde_json::json!({
                 "type": "stats",
+                "mode": mode.as_str(),
                 "pps": pps,
                 "total": total,
+                "pass": pass,
+                "drop": drop_count,
             })
             .to_string();
             let _ = tx.send(line);
         }
     });
+}
+
+fn sum_counter(
+    counters: &PerCpuArray<aya::maps::MapData, u64>,
+    index: u32,
+) -> u64 {
+    counters
+        .get(&index, 0)
+        .map(|values| values.iter().copied().sum())
+        .unwrap_or_default()
 }
 
 fn parse_flow_event(bytes: &[u8]) -> Option<FlowEvent> {
@@ -194,7 +259,8 @@ fn parse_flow_event(bytes: &[u8]) -> Option<FlowEvent> {
     Some(FlowEvent {
         kind: bytes[0],
         protocol: bytes[1],
-        _pad: [0; 2],
+        action: bytes[2],
+        _pad: bytes[3],
         src_addr: bytes[4..8].try_into().ok()?,
         dst_addr: bytes[8..12].try_into().ok()?,
         src_port: u16::from_ne_bytes(bytes[12..14].try_into().ok()?),
@@ -213,7 +279,8 @@ fn print_flow_event(event: &FlowEvent) {
     }
 
     println!(
-        "flow event: proto={}, src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
+        "flow event: action={}, proto={}, src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
+        action_name(event.action),
         protocol_name(event.protocol),
         event.src_addr[0],
         event.src_addr[1],
@@ -242,6 +309,7 @@ fn event_to_json(event: &FlowEvent) -> String {
     serde_json::json!({
         "type": "flow",
         "protocol": protocol_name(event.protocol),
+        "action": action_name(event.action),
         "src": ipv4_string(event.src_addr),
         "src_port": event.src_port,
         "dst": ipv4_string(event.dst_addr),
@@ -252,6 +320,14 @@ fn event_to_json(event: &FlowEvent) -> String {
 
 fn ipv4_string(addr: [u8; 4]) -> String {
     format!("{}.{}.{}.{}", addr[0], addr[1], addr[2], addr[3])
+}
+
+fn action_name(action: u8) -> &'static str {
+    if action == PACKET_ACTION_DROP {
+        "DROP"
+    } else {
+        "PASS"
+    }
 }
 
 fn protocol_name(protocol: u8) -> &'static str {
