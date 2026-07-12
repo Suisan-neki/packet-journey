@@ -1161,8 +1161,10 @@ export default function App() {
           return;
         }
         if (event.type === "physical_action") {
+          // 操作通知だけでは旅を開始しない。XDPで対象flowを実測し、
+          // action_correlatedを受け取ってから画面を進める。
           setPacket(current => ({ ...current, operation: event.label ?? current.operation }));
-          start();
+          setStreamStatus("correlating");
           return;
         }
         if (event.type === "action_correlated") {
@@ -1176,6 +1178,7 @@ export default function App() {
             dstPort: Number(event.dst_port ?? current.dstPort),
             xdpAction: "XDP_PASS",
           }));
+          setStreamStatus("observed");
           if (frameIdxRef.current === 0 || frameIdxRef.current === FRAMES.length - 1) start();
         }
       },

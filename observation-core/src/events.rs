@@ -45,6 +45,12 @@ pub struct PhysicalActionEvent {
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub src_ip: Option<String>,
+    /// この操作が発生させる通信のプロトコル。相関時に制御通信用パケットを除外する。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_protocol: Option<String>,
+    /// この操作が発生させる通信の宛先ポート。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_dst_port: Option<u16>,
 }
 
 /// 物理操作と eBPF flow の相関結果。
@@ -193,6 +199,14 @@ pub fn parse_upstream_line(line: &str) -> Option<UpstreamEvent> {
                 .get("src_ip")
                 .and_then(|v| v.as_str())
                 .map(str::to_string),
+            expected_protocol: value
+                .get("expected_protocol")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            expected_dst_port: value
+                .get("expected_dst_port")
+                .and_then(|v| v.as_u64())
+                .and_then(|v| u16::try_from(v).ok()),
         })),
         _ => None,
     }
