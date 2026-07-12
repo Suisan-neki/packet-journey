@@ -9,9 +9,6 @@ pub enum StreamEvent {
     Stats(StatsEvent),
     Sensor(SensorEvent),
     PhysicalAction(PhysicalActionEvent),
-    TrafficHealth(TrafficHealthEvent),
-    AttackState(AttackStateEvent),
-    DefenseMode(DefenseModeEvent),
     ActionCorrelated(ActionCorrelatedEvent),
     Guidance(GuidanceEvent),
     FhirSnapshot(FhirSnapshotEvent),
@@ -289,6 +286,9 @@ pub enum UpstreamEvent {
     Stats(StatsEvent),
     Sensor(SensorEvent),
     PhysicalAction(PhysicalActionEvent),
+    TrafficHealth(TrafficHealthEvent),
+    AttackState(AttackStateEvent),
+    DefenseMode(DefenseModeEvent),
 }
 
 impl UpstreamEvent {
