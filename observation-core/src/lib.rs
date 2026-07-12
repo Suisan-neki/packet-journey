@@ -5,9 +5,10 @@ pub mod mock_fhir;
 
 pub use correlation::{CorrelationEngine, CorrelationOutput};
 pub use events::{
-    parse_upstream_line, ActionCorrelatedEvent, ActionItem, AlertEvent, CauseAxis, FlowEvent,
-    GuidanceEvent, MockPatient, PhysicalActionEvent, ScenarioId, SensorEvent, SensorMetric,
-    Severity, SourceRef, StreamEvent, UpstreamEvent,
+    parse_upstream_line, ActionCorrelatedEvent, ActionItem, AlertEvent, AttackStateEvent,
+    CauseAxis, DefenseModeEvent, FlowEvent, GuidanceEvent, MockPatient, PhysicalActionEvent,
+    ScenarioId, SensorEvent, SensorMetric, Severity, SourceRef, StreamEvent, TrafficHealthEvent,
+    UpstreamEvent,
 };
 pub use judgment::{JudgmentEngine, JudgmentOutput};
 pub use mock_fhir::snapshot_for_scenario;
