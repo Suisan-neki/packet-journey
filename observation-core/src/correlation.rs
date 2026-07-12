@@ -77,10 +77,22 @@ impl CorrelationEngine {
             if !within_window {
                 return false;
             }
-            match &pending.action.src_ip {
-                Some(expected) => expected == &flow.src,
-                None => true,
-            }
+            let src_matches = pending
+                .action
+                .src_ip
+                .as_ref()
+                .is_none_or(|expected| expected == &flow.src);
+            let protocol_matches = pending
+                .action
+                .expected_protocol
+                .as_ref()
+                .is_none_or(|expected| expected.eq_ignore_ascii_case(&flow.protocol));
+            let dst_port_matches = pending
+                .action
+                .expected_dst_port
+                .is_none_or(|expected| expected == flow.dst_port);
+
+            src_matches && protocol_matches && dst_port_matches
         })
     }
 
@@ -100,6 +112,8 @@ mod tests {
             action: "check_status".to_string(),
             label: "状態確認".to_string(),
             src_ip: src_ip.map(str::to_string),
+            expected_protocol: Some("TCP".to_string()),
+            expected_dst_port: Some(8080),
         }
     }
 
@@ -127,6 +141,24 @@ mod tests {
             CorrelationOutput::Passthrough(StreamEvent::Flow(_))
         ));
         assert!(matches!(outputs[1], CorrelationOutput::Correlated(_)));
+    }
+
+
+    #[test]
+    fn ignores_control_plane_flow_from_same_source() {
+        let mut engine = CorrelationEngine::default();
+        let _ = engine.ingest(&UpstreamEvent::PhysicalAction(sample_action(Some(
+            "192.168.1.50",
+        ))));
+
+        let outputs = engine.ingest(&UpstreamEvent::Flow(FlowEvent {
+            protocol: "TCP".to_string(),
+            src: "192.168.1.50".to_string(),
+            src_port: 52341,
+            dst: "192.168.1.10".to_string(),
+            dst_port: 9001,
+        }));
+        assert_eq!(outputs.len(), 1);
     }
 
     #[test]
