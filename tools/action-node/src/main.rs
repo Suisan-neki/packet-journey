@@ -180,6 +180,8 @@ async fn trigger_action(
         "action": action,
         "label": label,
         "src_ip": opt.src_ip,
+        "expected_protocol": "TCP",
+        "expected_dst_port": opt.http_port,
     })
     .to_string();
 
@@ -211,6 +213,8 @@ async fn trigger_action_standalone(
         "action": action,
         "label": label,
         "src_ip": src_ip,
+        "expected_protocol": "TCP",
+        "expected_dst_port": http_port,
     })
     .to_string();
     hub.write_all(line.as_bytes()).await?;
