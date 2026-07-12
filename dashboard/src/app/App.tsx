@@ -1,1185 +1,265 @@
-// Packet Journey — 初心者向け改善版
-// 現象→説明→技術用語 の順番で情報を開示する
-
-import { useState, useEffect, useRef, type CSSProperties } from "react";
-import { Play, Pause, SkipForward, SkipBack, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { isWebDemo, subscribeStream } from "../stream.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES
-// ─────────────────────────────────────────────────────────────────────────────
+type HarborMode = "monitor" | "protect";
 
-type Phase =
-  | "idle" | "req-gen" | "req-sail" | "xdp"
-  | "srv-recv" | "srv-proc" | "resp-gen"
-  | "resp-sail" | "cli-recv" | "complete";
-
-type XdpState = "none" | "checking" | "passed";
-
-interface PacketInfo {
-  operation: string;
-  protocol: string;
-  srcIp: string;
-  srcPort: number;
-  dstIp: string;
-  dstPort: number;
-  xdpAction: string;
-}
-
-interface PacketEvent {
+interface HarborEvent {
   type?: string;
-  label?: string;
+  mode?: string;
+  pps?: number;
+  total?: number;
+  pass?: number;
+  drop?: number;
+  success?: boolean;
+  latency_ms?: number;
+  status_code?: number;
+  active?: boolean;
+  packets_sent?: number;
+  target?: string;
+  dst_port?: number;
   protocol?: string;
+  action?: string;
   src?: string;
   src_port?: number;
   dst?: string;
-  dst_port?: number;
-  pps?: number;
-  total?: number;
 }
 
-interface Frame {
-  id: string;
-  labelJa: string;
-  phase: Phase;
-  cLayer: number | null;
-  sLayer: number | null;
-  cDir: "down" | "up" | null;
-  sDir: "down" | "up" | null;
-  ship: "none" | "req" | "resp";
-  xdp: XdpState;
-  srvProc: boolean;
-  respReady: boolean;
-  cliDone: boolean;
-  dur: number;
+interface HarborState {
+  mode: HarborMode;
+  pps: number;
+  total: number;
+  passed: number;
+  dropped: number;
+  healthSuccess: boolean;
+  latencyMs: number;
+  statusCode: number | null;
+  attackActive: boolean;
+  attackPps: number;
+  attackPackets: number;
+  attackPort: number;
+  target: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OSI LAYER DATA — 日本語の役割説明を中心に
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface OsiLayerDef {
-  lbl: string;
-  name: string;
-  nameJa: string;
-  roleJa: string;
-  descJa: string;
-  techLabel: string;
-  valueReqJa?: string | null;
-  valueTech?: string;
-  transparent?: boolean;
-  hasXdp?: boolean;
+interface LogEntry {
+  id: number;
+  time: string;
+  message: string;
+  tone: "quiet" | "pass" | "drop" | "warn";
 }
 
-const OSI: OsiLayerDef[] = [
-  {
-    lbl: "L7", name: "Application", nameJa: "アプリケーション",
-    roleJa: "手紙を書く",
-    descJa: "アプリケーションが、相手に伝えたいメッセージの本体を作成します。今回は「GET /health」というリクエストです。",
-    techLabel: "Application / L7",
-  },
-  {
-    lbl: "L6", name: "Presentation", nameJa: "プレゼンテーション",
-    roleJa: "共通言語に翻訳する",
-    descJa: "人間が読める文字を、コンピューターが理解できる共通のデータ形式（バイト列など）に変換します。",
-    techLabel: "Presentation / L6",
-    transparent: true,
-  },
-  {
-    lbl: "L5", name: "Session", nameJa: "セッション",
-    roleJa: "会話の窓口を開く",
-    descJa: "通信が途切れないように、相手との会話の開始から終了までの手順を取り決めます。",
-    techLabel: "Session / L5",
-    transparent: true,
-  },
-  {
-    lbl: "L4", name: "Transport", nameJa: "トランスポート",
-    roleJa: "担当部署のラベルを貼る",
-    descJa: "サーバーの「どのアプリ」に届けるかを指定します。このラベルがポート番号です。",
-    techLabel: "TCP・ポート番号 / L4",
-    valueReqJa: "52499 → 8080",
-    valueTech: "ポート 52499 → 8080",
-  },
-  {
-    lbl: "L3", name: "Network", nameJa: "ネットワーク",
-    roleJa: "宛先の住所を書く",
-    descJa: "ネットワーク上の「どのコンピューター」に届けるかを指定します。この住所がIPアドレスです。",
-    techLabel: "IPアドレス / L3",
-    valueReqJa: null,
-    valueTech: "192.168.1.50 → 192.168.1.10",
-  },
-  {
-    lbl: "L2", name: "Data Link", nameJa: "データリンク",
-    roleJa: "次の経由地を記す",
-    descJa: "最終目的地へ向かうために、まずは「次にバケツリレーする隣の機器」を指定します。これがMACアドレスです。",
-    techLabel: "Ethernet・MACアドレス / L2",
-    hasXdp: true,
-  },
-  {
-    lbl: "L1", name: "Physical", nameJa: "フィジカル",
-    roleJa: "物理的な波に乗せる",
-    descJa: "すべての封筒を重ねた荷物を、ケーブルの電気信号やWi-Fiの電波に変換して送り出します。",
-    techLabel: "Physical / L1",
-  },
-];
-
-const DEFAULT_PACKET: PacketInfo = {
-  operation: "状態確認",
-  protocol: "TCP",
-  srcIp: "192.168.1.50",
-  srcPort: 52499,
-  dstIp: "192.168.1.10",
-  dstPort: 8080,
-  xdpAction: "XDP_PASS",
+const DEMO_STATE: HarborState = {
+  mode: "protect",
+  pps: 1874,
+  total: 148620,
+  passed: 6254,
+  dropped: 142366,
+  healthSuccess: true,
+  latencyMs: 14,
+  statusCode: 200,
+  attackActive: true,
+  attackPps: 1832,
+  attackPackets: 98420,
+  attackPort: 4000,
+  target: "192.168.1.10",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LAYER ACTION MESSAGES — 平易な日本語
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MSG_SIMPLE: Record<string, string[]> = {
-  creq:  ["手紙を書きました","共通言語に翻訳します","会話の窓口を開きます",
-          "担当部署ラベルを貼りました（52499→8080）","宛先の住所を書きました（192.168.1.50→.1.10）","次の経由地を記しました","電気信号・電波に変えて送り出します"],
-  srecv: ["「GET /health」を取り出しました","データ形式を確認します","会話のつながりを確認します",
-          "アプリ番号を確認します","端末の住所を確認します","配送情報を確認します（XDP済）","信号を受け取りました"],
-  sresp: ["「200 OK」を生成しました","共通言語に翻訳します","会話の窓口を開きます",
-          "担当部署ラベルを貼りました（8080→52499）","宛先の住所を書きました（.1.10→.1.50）","次の経由地を記しました","電気信号・電波に変えて送り出します"],
-  crecv: ["「200 OK」を受け取りました","データ形式を確認します","会話のつながりを確認します",
-          "アプリ番号を確認します","端末の住所を確認します","配送情報を確認します","信号を受け取りました"],
+const INITIAL_STATE: HarborState = {
+  mode: "monitor",
+  pps: 0,
+  total: 0,
+  passed: 0,
+  dropped: 0,
+  healthSuccess: false,
+  latencyMs: 0,
+  statusCode: null,
+  attackActive: false,
+  attackPps: 0,
+  attackPackets: 0,
+  attackPort: 4000,
+  target: "192.168.1.10",
 };
 
-const MSG_TECH: Record<string, string[]> = {
-  creq:  ["「状態確認」を生成","データ形式を整える","セッションを管理",
-          "TCP :52499 → :8080","IP 192.168.1.50 → .1.10","Ethernet フレーム化","電気信号として送出"],
-  srecv: ["「状態確認」を処理","データ形式を解析","セッションを管理",
-          "TCP セグメント解析","IP パケット解析","Ethernet 解析 + XDP済","信号を受信"],
-  sresp: ["「200 OK」を生成","データ形式を整える","セッションを管理",
-          "TCP :8080 → :52499","IP 192.168.1.10 → .50","Ethernet フレーム化","電気信号として送出"],
-  crecv: ["「200 OK」を受信","データ形式を解析","セッションを管理",
-          "TCP セグメント解析","IP パケット解析","Ethernet 解析","信号を受信"],
-};
-
-const TRANSPARENT_NOTE = "TCP/IPを使う実際のシステムでは、この役割をアプリやライブラリがまとめて担当することがあります。";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FRAMES
-// ─────────────────────────────────────────────────────────────────────────────
-
-function fr(
-  id: string, labelJa: string, phase: Phase,
-  cL: number | null, sL: number | null,
-  cD: "down"|"up"|null, sD: "down"|"up"|null,
-  ship: "none"|"req"|"resp", xdp: XdpState,
-  srvProc: boolean, respReady: boolean, cliDone: boolean,
-  dur: number
-): Frame {
-  return { id, labelJa, phase, cLayer: cL, sLayer: sL, cDir: cD, sDir: sD, ship, xdp, srvProc, respReady, cliDone, dur };
+function nowLabel() {
+  return new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date());
 }
 
-const PACE = {
-  layer: 2000,
-  conceptualLayer: 2000,
-  physicalLayer: 2000,
-  receiveLayer: 2000,
-  receiveFinal: 2000,
-  sailing: 4700,
-  xdpChecking: 2500,
-  xdpResult: 4000,
-  serverProcessing: 3200,
-} as const;
+function formatCount(value: number) {
+  return new Intl.NumberFormat("ja-JP").format(Math.max(0, Math.round(value)));
+}
 
-const FRAMES: Frame[] = [
-  fr("idle",     "待機中",                  "idle",     null,null, null,null,   "none","none",   false,false,false, 0),
-  fr("req-l7",   "リクエストを作る",         "req-gen",  0,   null, "down",null, "none","none",   false,false,false, PACE.layer),
-  fr("req-l6",   "形式を整える",             "req-gen",  1,   null, "down",null, "none","none",   false,false,false, PACE.conceptualLayer),
-  fr("req-l5",   "つながりを記録する",       "req-gen",  2,   null, "down",null, "none","none",   false,false,false, PACE.conceptualLayer),
-  fr("req-l4",   "アプリ番号を付ける",       "req-gen",  3,   null, "down",null, "none","none",   false,false,false, PACE.layer),
-  fr("req-l3",   "端末の住所を付ける",       "req-gen",  4,   null, "down",null, "none","none",   false,false,false, PACE.layer),
-  fr("req-l2",   "配送情報を付ける",         "req-gen",  5,   null, "down",null, "none","none",   false,false,false, PACE.layer),
-  fr("req-l1",   "電気信号として送り出す",   "req-gen",  6,   null, "down",null, "none","none",   false,false,false, PACE.physicalLayer),
-  fr("req-sail", "リクエストを送信中",       "req-sail", null,null, null,null,   "req","none",    false,false,false, PACE.sailing),
-  fr("xdp-chk",  "入口で確認中...",          "xdp",      null,5,    null,null,   "req","checking",false,false,false, PACE.xdpChecking),
-  fr("xdp-pass", "XDP_PASS（確認完了）",      "xdp",      null,5,    null,null,   "req","passed",  false,false,false, PACE.xdpResult),
-  fr("srv-l1",   "信号を受け取る",           "srv-recv", null,6,    null,"up",   "req","passed",  false,false,false, PACE.receiveLayer),
-  fr("srv-l2",   "配送情報を確認する",       "srv-recv", null,5,    null,"up",   "req","passed",  false,false,false, PACE.receiveLayer),
-  fr("srv-l3",   "端末の住所を確認する",     "srv-recv", null,4,    null,"up",   "none","passed", false,false,false, PACE.receiveLayer),
-  fr("srv-l4",   "アプリ番号を確認する",     "srv-recv", null,3,    null,"up",   "none","passed", false,false,false, PACE.receiveLayer),
-  fr("srv-l5",   "つながりを確認する",       "srv-recv", null,2,    null,"up",   "none","passed", false,false,false, PACE.receiveLayer),
-  fr("srv-l6",   "形式を確認する",           "srv-recv", null,1,    null,"up",   "none","passed", false,false,false, PACE.receiveLayer),
-  fr("srv-l7",   "リクエストを取り出す",     "srv-recv", null,0,    null,"up",   "none","passed", false,false,false, PACE.receiveFinal),
-  fr("srv-proc", "サーバーが処理中",         "srv-proc", null,0,    null,null,   "none","none",   true,false,false, PACE.serverProcessing),
-  fr("resp-l7",  "レスポンスを作る",         "resp-gen", null,0,    null,"down", "resp","none",   false,true,false, PACE.layer),
-  fr("resp-l6",  "形式を整える",             "resp-gen", null,1,    null,"down", "resp","none",   false,true,false, PACE.conceptualLayer),
-  fr("resp-l5",  "つながりを記録する",       "resp-gen", null,2,    null,"down", "resp","none",   false,true,false, PACE.conceptualLayer),
-  fr("resp-l4",  "アプリ番号を付ける",       "resp-gen", null,3,    null,"down", "resp","none",   false,true,false, PACE.layer),
-  fr("resp-l3",  "端末の住所を付ける",       "resp-gen", null,4,    null,"down", "resp","none",   false,true,false, PACE.layer),
-  fr("resp-l2",  "配送情報を付ける",         "resp-gen", null,5,    null,"down", "resp","none",   false,true,false, PACE.layer),
-  fr("resp-l1",  "電気信号として送り出す",   "resp-gen", null,6,    null,"down", "resp","none",   false,true,false, PACE.physicalLayer),
-  fr("resp-sail","レスポンスを送信中",       "resp-sail",null,null, null,null,   "resp","none",   false,true,false, PACE.sailing),
-  fr("cli-l1",   "信号を受け取る",           "cli-recv", 6,   null, "up",null,   "resp","none",   false,true,false, PACE.receiveLayer),
-  fr("cli-l2",   "配送情報を確認する",       "cli-recv", 5,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
-  fr("cli-l3",   "端末の住所を確認する",     "cli-recv", 4,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
-  fr("cli-l4",   "アプリ番号を確認する",     "cli-recv", 3,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
-  fr("cli-l5",   "つながりを確認する",       "cli-recv", 2,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
-  fr("cli-l6",   "形式を確認する",           "cli-recv", 1,   null, "up",null,   "none","none",   false,true,false, PACE.receiveLayer),
-  fr("cli-l7",   "レスポンスを受け取る",     "cli-recv", 0,   null, "up",null,   "none","none",   false,true,true,   PACE.receiveFinal),
-  fr("complete", "往復が完了しました",        "complete", null,null, null,null,   "none","none",   false,true,true,   0),
-];
-
-const REQ_SAIL_IDX  = FRAMES.findIndex(f => f.id === "req-sail");
-const RESP_SAIL_IDX = FRAMES.findIndex(f => f.id === "resp-sail");
-const XDP_IDX       = FRAMES.findIndex(f => f.id === "xdp-chk");
-const SRV_PROC_IDX  = FRAMES.findIndex(f => f.id === "srv-proc");
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SHIP SVG
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ShipSVG({ flip }: { flip?: boolean }) {
+function ShipMark() {
   return (
-    <svg viewBox="0 0 220 72" fill="none"
-      style={{ width: "100%", height: "100%", transform: flip ? "scaleX(-1)" : undefined }}>
-      <path d="M10 44 Q16 57 28 60 L192 60 Q204 57 210 44 Z" fill="#1A3245" stroke="#789D99" strokeWidth="1.1" />
-      <rect x="26" y="37" width="168" height="7" fill="#152B3C" stroke="#789D99" strokeWidth="0.7" />
-      <rect x="128" y="20" width="42" height="17" fill="#0F2030" stroke="#9CA8AD" strokeWidth="0.7" />
-      <rect x="133" y="24" width="6" height="4" fill="#789D99" opacity="0.5" />
-      <rect x="143" y="24" width="6" height="4" fill="#789D99" opacity="0.5" />
-      <rect x="153" y="24" width="6" height="4" fill="#789D99" opacity="0.5" />
-      <rect x="160" y="8" width="8" height="13" rx="1" fill="#1A3245" stroke="#9CA8AD" strokeWidth="0.7" />
-      <rect x="159" y="7" width="10" height="3" rx="0.5" fill="#9CA8AD" opacity="0.35" />
-      <line x1="116" y1="8" x2="116" y2="37" stroke="#9CA8AD" strokeWidth="1" opacity="0.55" />
-      <rect x="32" y="28" width="24" height="9" rx="0.5" fill="#B89A6D" opacity="0.88" stroke="#0B2233" strokeWidth="0.6" />
-      <rect x="60" y="28" width="24" height="9" rx="0.5" fill="#789D99" opacity="0.58" stroke="#0B2233" strokeWidth="0.6" />
-      <rect x="88" y="28" width="24" height="9" rx="0.5" fill="#789D99" opacity="0.38" stroke="#0B2233" strokeWidth="0.6" />
-      <path d="M210 44 L218 52 L210 60" fill="none" stroke="#789D99" strokeWidth="0.9" />
+    <svg viewBox="0 0 220 72" aria-hidden="true">
+      <path d="M10 44 Q16 57 28 60 L192 60 Q204 57 210 44 Z" className="ship-hull" />
+      <rect x="26" y="37" width="168" height="7" className="ship-deck" />
+      <rect x="128" y="20" width="42" height="17" className="ship-cabin" />
+      <rect x="133" y="24" width="6" height="4" className="ship-window" />
+      <rect x="143" y="24" width="6" height="4" className="ship-window" />
+      <rect x="153" y="24" width="6" height="4" className="ship-window" />
+      <rect x="160" y="8" width="8" height="13" className="ship-stack" />
+      <line x1="116" y1="8" x2="116" y2="37" className="ship-mast" />
+      <rect x="32" y="28" width="24" height="9" className="cargo cargo--sand" />
+      <rect x="60" y="28" width="24" height="9" className="cargo cargo--green" />
+      <rect x="88" y="28" width="24" height="9" className="cargo cargo--dim" />
     </svg>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OSI LAYER ROW — 日本語役割を大きく、技術名を小さく
-// ─────────────────────────────────────────────────────────────────────────────
+function LatencyTrace({ values }: { values: number[] }) {
+  const points = useMemo(() => {
+    if (values.length === 0) return "";
+    const max = Math.max(80, ...values);
+    return values
+      .map((value, index) => {
+        const x = values.length === 1 ? 100 : (index / (values.length - 1)) * 100;
+        const y = 34 - Math.min(30, (value / max) * 30);
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }, [values]);
 
-function OsiRow({
-  idx, active, dir, simpleMode, xdpState,
-  msgSimple, msgTech,
+  return (
+    <svg className="latency-trace" viewBox="0 0 100 38" preserveAspectRatio="none" aria-label="直近のHTTP応答時間">
+      <line x1="0" y1="34" x2="100" y2="34" />
+      {points && <polyline points={points} />}
+    </svg>
+  );
+}
+
+function Meter({
+  label,
+  value,
+  unit,
+  note,
+  tone = "plain",
 }: {
-  idx: number;
-  active: boolean;
-  dir: "down" | "up" | null;
-  simpleMode: boolean;
-  xdpState: XdpState;
-  msgSimple: string | null;
-  msgTech: string | null;
+  label: string;
+  value: string;
+  unit?: string;
+  note: string;
+  tone?: "plain" | "pass" | "drop";
 }) {
-  const layer = OSI[idx];
-  const isXdpActive = layer.hasXdp && (xdpState === "checking" || xdpState === "passed");
-
-  const accentColor = isXdpActive
-    ? "#9A6258"
-    : active && dir === "down" ? "#B89A6D"
-    : active && dir === "up"   ? "#789D99"
-    : "transparent";
-
-  const bgColor = isXdpActive ? "rgba(154,98,88,0.07)"
-    : active && dir === "down" ? "rgba(184,154,109,0.07)"
-    : active && dir === "up"   ? "rgba(120,157,153,0.07)"
-    : "transparent";
-
-  // L5/L6 are dimmed in simple mode (transparent in TCP/IP)
-  const rowOpacity = (layer.transparent && simpleMode && !active) ? 0.45 : 1;
-
   return (
-    <div style={{
-      flex: 1, display: "flex", alignItems: "stretch",
-      borderBottom: "1px solid rgba(120,157,153,0.09)",
-      background: bgColor, transition: "background 0.4s",
-      opacity: rowOpacity, overflow: "hidden",
-    }}>
-      {/* Accent bar */}
-      <div style={{
-        width: "3px", flexShrink: 0,
-        background: accentColor, transition: "background 0.35s",
-      }} />
-
-      {/* Content */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 8px 0 8px", minWidth: 0, gap: "1px" }}>
-        {/* Layer identifier: "L7 アプリケーション" */}
-        <div style={{
-          fontSize: "9px", color: "#789D99",
-          opacity: simpleMode ? (active ? 0.6 : 0.28) : (active ? 0.8 : 0.5),
-          letterSpacing: "0.05em", transition: "opacity 0.3s",
-          display: "flex", alignItems: "center", gap: "4px",
-        }}>
-          <span style={{ fontFamily: "monospace" }}>{layer.lbl}</span>
-          <span>{layer.nameJa}</span>
-          {layer.hasXdp && !simpleMode && (
-            <span style={{
-              fontSize: "7px", padding: "1px 3px",
-              border: `1px solid ${isXdpActive ? "#9A6258" : "rgba(120,157,153,0.3)"}`,
-              color: isXdpActive ? "#9A6258" : "rgba(120,157,153,0.4)",
-              letterSpacing: "0.1em", transition: "all 0.3s",
-            }}>XDP</span>
-          )}
-        </div>
-
-        {/* Role description — primary */}
-        <div style={{
-          fontSize: active ? "12px" : "11px",
-          color: active ? "#F1EFE8" : "rgba(241,239,232,0.6)",
-          fontWeight: active ? 400 : 300,
-          transition: "color 0.35s, font-size 0.2s",
-          lineHeight: 1.3,
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>
-          {layer.roleJa}
-        </div>
-
-        {/* Active: action message */}
-        {active && (msgSimple || isXdpActive) && (
-          <div style={{
-            fontSize: "10px", color: accentColor,
-            opacity: 0.9, lineHeight: 1.4,
-            animation: "fadeSlide 0.4s ease",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          }}>
-            {isXdpActive
-              ? (xdpState === "checking" ? "検問しています..." : "通過を許可")
-              : msgSimple}
-          </div>
-        )}
-
-        {/* Active: tech detail (tech mode) */}
-        {active && !simpleMode && msgTech && !isXdpActive && (
-          <div style={{
-            fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD",
-            opacity: 0.6, letterSpacing: "0.04em",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          }}>
-            {msgTech}
-          </div>
-        )}
-
-        {/* L5/L6 transparent note */}
-        {active && layer.transparent && !simpleMode && (
-          <div style={{ fontSize: "8px", color: "#9CA8AD", opacity: 0.5, lineHeight: 1.4, marginTop: "1px" }}>
-            {TRANSPARENT_NOTE}
-          </div>
-        )}
+    <section className={`meter meter--${tone}`}>
+      <div className="meter-label">{label}</div>
+      <div className="meter-reading">
+        <span>{value}</span>
+        {unit && <small>{unit}</small>}
       </div>
-
-      {/* Direction arrow */}
-      {active && dir && (
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "center",
-          width: "20px", flexShrink: 0,
-          color: dir === "down" ? "#B89A6D" : "#789D99",
-          fontSize: "13px", opacity: 0.75,
-        }}>
-          {dir === "down" ? "↓" : "↑"}
-        </div>
-      )}
-    </div>
+      <div className="meter-note">{note}</div>
+    </section>
   );
 }
-
-const OVERVIEW_STAGES = [
-  { title: "アプリ", tech: "HTTP / L7–L5", layers: [0, 1, 2], description: "ボタン操作からリクエストを作る" },
-  { title: "TCP/IP", tech: "TCP・IP / L4–L3", layers: [3, 4], description: "宛先とアプリの番号を付ける" },
-  { title: "ネットワーク", tech: "Ethernet・信号 / L2–L1", layers: [5, 6], description: "相手の端末へ送り出す" },
-  { title: "カーネル入口", tech: "eBPF / XDP", layers: [], description: "届いたパケットを早い段階で観測する" },
-];
-
-function OverviewRow({
-  title, tech, description, active, direction, isXdp,
-}: {
-  title: string;
-  tech: string;
-  description: string;
-  active: boolean;
-  direction: "down" | "up" | null;
-  isXdp: boolean;
-}) {
-  const accent = isXdp ? "#9A6258" : direction === "down" ? "#B89A6D" : "#789D99";
-  return (
-    <div style={{
-      flex: 1,
-      display: "flex",
-      alignItems: "center",
-      gap: "8px",
-      padding: "0 10px",
-      borderBottom: "1px solid rgba(120,157,153,0.09)",
-      borderLeft: `3px solid ${active ? accent : "transparent"}`,
-      background: active ? `${isXdp ? "rgba(154,98,88,0.07)" : "rgba(120,157,153,0.07)"}` : "transparent",
-      transition: "background 0.35s, border-color 0.35s",
-      minHeight: 0,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: active ? "13px" : "12px", color: active ? "#F1EFE8" : "rgba(241,239,232,0.65)" }}>
-          {title}
-        </div>
-        <div style={{ fontSize: "9px", color: "#9CA8AD", opacity: active ? 0.85 : 0.45, lineHeight: 1.5 }}>
-          {description}
-        </div>
-        <div style={{ fontSize: "8px", fontFamily: "monospace", color: accent, opacity: active ? 0.75 : 0.3, marginTop: "2px" }}>
-          {tech}
-        </div>
-      </div>
-      {active && direction && <span style={{ color: accent, fontSize: "14px" }}>{direction === "down" ? "↓" : "↑"}</span>}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PORT COLUMN
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PortColumn({ side, frame, simpleMode, packet }: {
-  side: "client" | "server";
-  frame: Frame;
-  simpleMode: boolean;
-  packet: PacketInfo;
-}) {
-  const isClient = side === "client";
-  const activeLayer = isClient ? frame.cLayer : frame.sLayer;
-  const dir = isClient ? frame.cDir : frame.sDir;
-  const xdp = frame.xdp;
-  const phase = frame.phase;
-
-  function getMsgs(idx: number): [string | null, string | null] {
-    if (idx === 3) {
-      if (phase === "req-gen") return [`担当部署ラベルを貼りました（${packet.srcPort}→${packet.dstPort}）`, `${packet.protocol} :${packet.srcPort} → :${packet.dstPort}`];
-      if (phase === "srv-recv") return [MSG_SIMPLE.srecv[idx], `${packet.protocol} セグメント解析`];
-      if (phase === "resp-gen") return [`担当部署ラベルを貼りました（${packet.dstPort}→${packet.srcPort}）`, `${packet.protocol} :${packet.dstPort} → :${packet.srcPort}`];
-      if (phase === "cli-recv") return [MSG_SIMPLE.crecv[idx], `${packet.protocol} セグメント解析`];
-    }
-    if (idx === 4) {
-      if (phase === "req-gen") return [`宛先の住所を書きました（${packet.srcIp}→${packet.dstIp}）`, `IP ${packet.srcIp} → ${packet.dstIp}`];
-      if (phase === "srv-recv") return [MSG_SIMPLE.srecv[idx], "IP パケット解析"];
-      if (phase === "resp-gen") return [`宛先の住所を書きました（${packet.dstIp}→${packet.srcIp}）`, `IP ${packet.dstIp} → ${packet.srcIp}`];
-      if (phase === "cli-recv") return [MSG_SIMPLE.crecv[idx], "IP パケット解析"];
-    }
-    if (isClient) {
-      if (phase === "req-gen") return [MSG_SIMPLE.creq[idx], MSG_TECH.creq[idx]];
-      if (phase === "cli-recv") return [MSG_SIMPLE.crecv[idx], MSG_TECH.crecv[idx]];
-    } else {
-      if (phase === "srv-recv") return [MSG_SIMPLE.srecv[idx], MSG_TECH.srecv[idx]];
-      if (phase === "resp-gen") return [MSG_SIMPLE.sresp[idx], MSG_TECH.sresp[idx]];
-    }
-    return [null, null];
-  }
-
-  const ipAddr = isClient ? packet.srcIp : packet.dstIp;
-  const role = isClient ? "操作端末" : "観測サーバー";
-  const roleEn = isClient ? "CLIENT PORT" : "SERVER PORT";
-
-  return (
-    <div style={{
-      display: "flex", flexDirection: "column", height: "100%",
-      borderRight: isClient ? "1px solid rgba(120,157,153,0.12)" : undefined,
-      borderLeft: !isClient ? "1px solid rgba(120,157,153,0.12)" : undefined,
-    }}>
-      {/* Zone header */}
-      <div style={{
-        flexShrink: 0, height: "46px",
-        borderBottom: "1px solid rgba(120,157,153,0.12)",
-        display: "flex", alignItems: "center",
-        padding: "0 10px",
-        justifyContent: isClient ? "flex-start" : "flex-end",
-        gap: "6px",
-      }}>
-        <div style={{ textAlign: isClient ? "left" : "right" }}>
-          <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>{role}</div>
-          {!simpleMode && (
-            <div style={{ fontSize: "8px", letterSpacing: "0.18em", color: "#9CA8AD", opacity: 0.55, textTransform: "uppercase" }}>
-              {roleEn} · {ipAddr}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* OSI layer stack */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {simpleMode
-          ? OVERVIEW_STAGES.map((stage, idx) => {
-              const xdpStageActive = idx === 3 && !isClient && phase === "xdp";
-              const serverAtXdp = !isClient && phase === "xdp";
-              const active = xdpStageActive || (!serverAtXdp && activeLayer !== null && stage.layers.includes(activeLayer));
-              return (
-                <OverviewRow
-                  key={stage.title}
-                  title={stage.title}
-                  tech={stage.tech}
-                  description={stage.description}
-                  active={active}
-                  direction={xdpStageActive ? null : dir}
-                  isXdp={xdpStageActive}
-                />
-              );
-            })
-          : OSI.map((_, idx) => {
-              const [ms, mt] = getMsgs(idx);
-              return (
-                <OsiRow
-                  key={idx} idx={idx}
-                  active={activeLayer === idx}
-                  dir={dir}
-                  simpleMode={simpleMode}
-                  xdpState={xdp}
-                  msgSimple={ms}
-                  msgTech={mt}
-                />
-              );
-            })}
-      </div>
-
-      {/* Status footer */}
-      <div style={{
-        flexShrink: 0, padding: "6px 10px",
-        borderTop: "1px solid rgba(120,157,153,0.09)",
-        minHeight: "36px", display: "flex", alignItems: "center",
-      }}>
-        {!isClient && frame.srvProc && (
-          <div>
-            <div style={{ fontSize: "11px", color: "#F1EFE8" }}>サーバーが処理しました</div>
-            {!simpleMode && (
-              <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.6 }}>HTTP 200 OK</div>
-            )}
-          </div>
-        )}
-        {!isClient && frame.respReady && phase !== "srv-proc" && !["resp-gen","resp-sail","cli-recv","complete"].includes(phase) && (
-          <div style={{ marginLeft: "auto", textAlign: "right" }}>
-            <div style={{ fontSize: "11px", color: "#B89A6D" }}>レスポンスの準備完了</div>
-            {!simpleMode && <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.6 }}>200 OK</div>}
-          </div>
-        )}
-        {isClient && frame.cliDone && (
-          <div>
-            <div style={{ fontSize: "11px", color: "#789D99" }}>レスポンスを受け取りました</div>
-            {!simpleMode && <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.6 }}>HTTP 200 OK</div>}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PACKET ENCAPSULATION VISUALIZATION
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PacketEncap({ cLayer, sLayer, phase, simpleMode, packet }: {
-  cLayer: number | null;
-  sLayer: number | null;
-  phase: Phase;
-  simpleMode: boolean;
-  packet: PacketInfo;
-}) {
-  const isSending   = phase === "req-gen" || phase === "resp-gen";
-  const isReceiving = phase === "srv-recv" || phase === "cli-recv";
-  const activeIdx   = isSending ? (cLayer ?? sLayer) : (sLayer ?? cLayer);
-
-  if (activeIdx === null || (!isSending && !isReceiving)) return null;
-
-  const isResp = phase === "resp-gen" || phase === "cli-recv";
-  const payloadText = isResp ? "200 OK" : "GET /health";
-
-  type Layer = { labelSimple: string; labelTech: string; value: string; color: string };
-  const layers: Layer[] = [];
-
-  if (isSending) {
-    if (activeIdx >= 5) layers.push({ labelSimple: "次の経由地の情報", labelTech: "Ethernet ヘッダ (L2)", value: "MACアドレス付与", color: "#789D99" });
-    if (activeIdx >= 4) layers.push({ labelSimple: "宛先の住所", labelTech: "IP ヘッダ (L3)", value: isResp ? `${packet.dstIp} → ${packet.srcIp}` : `${packet.srcIp} → ${packet.dstIp}`, color: "#789D99" });
-    if (activeIdx >= 3) layers.push({ labelSimple: "担当部署ラベル", labelTech: `${packet.protocol} ヘッダ (L4)`, value: isResp ? `${packet.dstPort} → ${packet.srcPort}` : `${packet.srcPort} → ${packet.dstPort}`, color: "#789D99" });
-    layers.push({ labelSimple: payloadText, labelTech: "Payload (L7)", value: "", color: "#B89A6D" });
-  } else {
-    // Unwrapping — show what's been peeled so far
-    const payload: Layer = { labelSimple: payloadText, labelTech: "Payload (L7)", value: "", color: "#B89A6D" };
-    if (activeIdx <= 3) layers.push({ labelSimple: "担当部署ラベルを確認", labelTech: `${packet.protocol} ヘッダ (L4)`, value: isResp ? `${packet.dstPort} → ${packet.srcPort}` : `${packet.srcPort} → ${packet.dstPort}`, color: "#789D99" });
-    if (activeIdx <= 4) layers.push({ labelSimple: "宛先の住所を確認", labelTech: "IP ヘッダ (L3)", value: isResp ? `${packet.dstIp} → ${packet.srcIp}` : `${packet.srcIp} → ${packet.dstIp}`, color: "#789D99" });
-    if (activeIdx <= 5) layers.push({ labelSimple: "配送情報を確認", labelTech: "Ethernet ヘッダ (L2)", value: "MACアドレス確認", color: "#789D99" });
-    layers.push(payload);
-  }
-
-  const outerToInner = isSending ? layers : [...layers].reverse();
-
-  return (
-    <div style={{ padding: "8px 12px", animation: "fadeSlide 0.3s ease" }}>
-      <div style={{ fontSize: "9px", letterSpacing: "0.18em", color: "#9CA8AD", textTransform: "uppercase", marginBottom: "8px" }}>
-        {isSending ? "封筒の中身（カプセル化）" : "封筒を開いていく（分解）"}
-      </div>
-      {outerToInner.map((w, i) => {
-        const isPayload = w.color === "#B89A6D";
-        const indent = isSending ? i : outerToInner.length - 1 - i;
-        return (
-          <div key={i} style={{ paddingLeft: `${indent * 10}px`, lineHeight: "1.85" }}>
-            <span style={{ color: "#9CA8AD", fontSize: "10px" }}>{indent > 0 ? "└ " : ""}</span>
-            <span style={{
-              fontSize: isPayload ? "13px" : "11px",
-              color: isPayload ? "#B89A6D" : "rgba(241,239,232,0.75)",
-              fontFamily: isPayload ? "'Noto Serif JP', serif" : "inherit",
-              fontWeight: isPayload ? 400 : 300,
-            }}>
-              {simpleMode ? w.labelSimple : w.labelTech}
-            </span>
-            {w.value && (
-              <span style={{
-                fontSize: "9px", fontFamily: "monospace",
-                color: isPayload ? "#B89A6D" : "#789D99",
-                opacity: 0.8, marginLeft: "6px",
-              }}>
-                {w.value}
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SEA CENTER
-// ─────────────────────────────────────────────────────────────────────────────
-
-function SeaCenter({
-  frame, packet, webDemo, onLaunch, reqShipRight, respShipLeft, simpleMode,
-}: {
-  frame: Frame;
-  packet: PacketInfo;
-  webDemo: boolean;
-  onLaunch: () => void;
-  reqShipRight: boolean;
-  respShipLeft: boolean;
-  simpleMode: boolean;
-}) {
-  const [xdpDetail, setXdpDetail] = useState(false);
-  const { phase, xdp, cLayer, sLayer } = frame;
-  const isIdle     = phase === "idle";
-  const isReqSail  = phase === "req-sail";
-  const isRespSail = phase === "resp-sail";
-  const isSailing  = isReqSail || isRespSail;
-  const isComplete = phase === "complete";
-  const isLayerPhase = ["req-gen","srv-recv","resp-gen","cli-recv"].includes(phase);
-  const isXdp      = phase === "xdp";
-
-  const reqLineActive  = phase !== "idle" && phase !== "req-gen";
-  const respLineActive = ["resp-sail","cli-recv","complete"].includes(phase);
-
-  // Context panel: what to show in the sea center for each phase
-  const getContextPanel = () => {
-    if (isIdle || isSailing || isComplete) return null;
-
-    if (isXdp) {
-      const passed = xdp === "passed";
-      return (
-        <div style={{ padding: "12px 14px" }}>
-          <div style={{
-            display: "inline-block", marginBottom: "8px", padding: "3px 7px",
-            border: "1px solid rgba(184,154,109,0.45)", color: "#B89A6D",
-            fontSize: "8px", letterSpacing: "0.16em", textTransform: "uppercase",
-          }}>
-            この展示の核
-          </div>
-          <div style={{ fontSize: "13px", color: "#F1EFE8", lineHeight: 1.6, marginBottom: "8px", fontFamily: "'Noto Serif JP', serif", fontWeight: 300 }}>
-            {passed
-              ? "操作とパケットが結びつきました"
-              : "カーネル入口でパケットを観測します"}
-          </div>
-          <div style={{ fontSize: "11px", color: "#9CA8AD", lineHeight: 1.9, marginBottom: "10px", whiteSpace: "pre-line" }}>
-            {passed
-              ? webDemo
-                ? "Web版では展示本番の相関結果を再現しています。\n実機ではボタン操作と観測パケットをここで結びつけます。"
-                : "ボタン操作と、実際に流れたパケットを相関できました。\nこのパケットは通常のカーネル処理へ進みます。"
-              : "XDPはアプリに届くより前の段階で通信を観測し、\n通す・捨てる・転送するといった判断ができます。"}
-          </div>
-          {passed && (
-            <div style={{
-              padding: "6px 10px",
-              border: "1px solid rgba(120,157,153,0.3)",
-              display: "inline-block",
-              marginBottom: "8px",
-            }}>
-              <div style={{ fontSize: "12px", color: "#789D99", fontWeight: 400 }}>通過を許可</div>
-              {!simpleMode && (
-                <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.65, marginTop: "2px" }}>
-                  XDP_PASS — 通常の処理へ進める
-                </div>
-              )}
-            </div>
-          )}
-          {!simpleMode && (
-            <div>
-              <button onClick={() => setXdpDetail(d => !d)} style={linkBtnStyle}>
-                {xdpDetail ? "▲ 閉じる" : "▼ eBPF/XDPについて詳しく"}
-              </button>
-              {xdpDetail && (
-                <div style={{
-                  marginTop: "8px", padding: "10px 12px",
-                  borderLeft: "2px solid rgba(120,157,153,0.3)",
-                  fontSize: "10px", color: "#9CA8AD", lineHeight: 1.9,
-                }}>
-                  <div style={{ marginBottom: "6px" }}>
-                    <span style={{ color: "#F1EFE8" }}>eBPF / XDP（eXpress Data Path）：</span><br />
-                    カーネル（OSの中心部分）でプログラムを動かし、届いた通信をアプリより早い段階で検査・処理できる仕組みです。
-                  </div>
-                  <div style={{ fontFamily: "monospace", fontSize: "9px", lineHeight: 2, marginBottom: "6px" }}>
-                    通信が到着<br />
-                    ↓ ネットワークカード<br />
-                    ↓ <span style={{ color: "#9A6258" }}>XDP ← いまここ（カーネルの門番）</span><br />
-                    ↓ カーネルのネットワーク処理<br />
-                    ↓ アプリケーション
-                  </div>
-                  <div style={{ fontSize: "9px", opacity: 0.6 }}>
-                    XDP_PASS — 通常の処理へ進める（今回はこれ）<br />
-                    XDP_DROP — ここで破棄する<br />
-                    XDP_REDIRECT — 別の場所へ転送する
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (phase === "srv-proc") {
-      return (
-        <div style={{ padding: "12px 14px" }}>
-          <div style={{ fontSize: "13px", color: "#F1EFE8", fontFamily: "'Noto Serif JP', serif", fontWeight: 300, lineHeight: 1.6, marginBottom: "8px" }}>
-            サーバーがレスポンスを作りました
-          </div>
-          <div style={{ fontSize: "11px", color: "#9CA8AD", lineHeight: 1.9, marginBottom: "10px" }}>
-            サーバーはリクエストを処理し、<br />成功したことを表すレスポンスを作ります。
-          </div>
-          <div style={{ padding: "8px 12px", border: "1px solid rgba(184,154,109,0.35)", display: "inline-block" }}>
-            <div style={{ fontSize: "12px", color: "#B89A6D", fontFamily: "monospace" }}>200 OK</div>
-            {!simpleMode && (
-              <div style={{ fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.65, marginTop: "2px" }}>
-                HTTP 200 OK — リクエストを正常に受け取り、処理できたことを表します。
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // Layer traversal phases: show context + packet viz
-    if (isLayerPhase) {
-      const activeIdx = cLayer ?? sLayer;
-      const layer = activeIdx !== null ? OSI[activeIdx] : null;
-      const isSending = phase === "req-gen" || phase === "resp-gen";
-      const isReceiving = phase === "srv-recv" || phase === "cli-recv";
-
-      const phaseTitle: Record<string, string> = {
-        "req-gen":  "送る準備をしています",
-        "srv-recv": "リクエストを開いています",
-        "resp-gen": "レスポンスの準備をしています",
-        "cli-recv": "レスポンスを受け取っています",
-      };
-
-      return (
-        <div>
-          <div style={{ padding: "10px 14px 6px", borderBottom: "1px solid rgba(120,157,153,0.1)" }}>
-            <div style={{ fontSize: "11px", color: "#9CA8AD", marginBottom: "4px", letterSpacing: "0.05em" }}>
-              {phaseTitle[phase]}
-            </div>
-            {layer && (
-              <div style={{ fontSize: "13px", color: "#F1EFE8", fontFamily: "'Noto Serif JP', serif", fontWeight: 300, lineHeight: 1.5 }}>
-                {layer.roleJa}
-              </div>
-            )}
-            {layer && (
-              <div style={{ fontSize: "10px", color: "#9CA8AD", marginTop: "4px", lineHeight: 1.7 }}>
-                {layer.descJa}
-              </div>
-            )}
-            {layer && layer.transparent && (
-              <div style={{ fontSize: "9px", color: "#9CA8AD", opacity: 0.5, marginTop: "4px", lineHeight: 1.6, borderLeft: "2px solid rgba(156,168,173,0.2)", paddingLeft: "6px" }}>
-                {TRANSPARENT_NOTE}
-              </div>
-            )}
-            {/* Show value — always when available (port/IP are shown at the step they're added) */}
-            {layer && (layer.valueReqJa || layer.valueTech) && (
-              <div style={{ marginTop: "5px" }}>
-                <div style={{ fontSize: "10px", color: "#B89A6D", fontFamily: "monospace", letterSpacing: "0.04em" }}>
-                  {simpleMode ? (layer.valueReqJa ?? layer.valueTech) : layer.valueTech}
-                </div>
-                {!simpleMode && layer.valueReqJa && (
-                  <div style={{ fontSize: "8px", color: "#9CA8AD", opacity: 0.5, marginTop: "1px" }}>
-                    ← このステップで追加されます
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <PacketEncap
-            cLayer={cLayer} sLayer={sLayer}
-            phase={phase} simpleMode={simpleMode} packet={packet}
-          />
-        </div>
-      );
-    }
-
-    return null;
-  };
-
-  const ctxPanel = getContextPanel();
-
-  return (
-    <div style={{ position: "relative", height: "100%", overflow: "hidden" }}>
-      {/* Wave texture */}
-      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.035 }} preserveAspectRatio="none">
-        <defs>
-          <pattern id="wv2" x="0" y="0" width="100" height="24" patternUnits="userSpaceOnUse">
-            <path d="M0 12 Q25 4 50 12 Q75 20 100 12" stroke="#789D99" strokeWidth="1" fill="none" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#wv2)" />
-      </svg>
-
-      {/* Route lines SVG */}
-      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 4 }}>
-        <line x1="2%" y1="72%" x2="98%" y2="72%" stroke="#789D99" strokeWidth="0.9"
-          opacity={reqLineActive ? "0.4" : "0.1"} style={{ transition: "opacity 0.8s" }} />
-        <line x1="2%" y1="72%" x2="98%" y2="72%" stroke="#B89A6D" strokeWidth="1.2"
-          strokeDasharray="2000" strokeDashoffset={isReqSail && reqShipRight ? "0" : "2000"} opacity="0.5"
-          style={{ transition: isReqSail && reqShipRight ? `stroke-dashoffset ${PACE.sailing}ms linear` : "stroke-dashoffset 0ms" }} />
-        {reqLineActive && (
-          <>
-            <line x1="30%" y1="70.2%" x2="32%" y2="72%" stroke="#789D99" strokeWidth="1" opacity="0.28" />
-            <line x1="32%" y1="72%" x2="30%" y2="73.8%" stroke="#789D99" strokeWidth="1" opacity="0.28" />
-            <line x1="60%" y1="70.2%" x2="62%" y2="72%" stroke="#789D99" strokeWidth="1" opacity="0.28" />
-            <line x1="62%" y1="72%" x2="60%" y2="73.8%" stroke="#789D99" strokeWidth="1" opacity="0.28" />
-          </>
-        )}
-        <line x1="2%" y1="75%" x2="98%" y2="75%" stroke="#789D99" strokeWidth="0.9" strokeDasharray="6 4"
-          opacity={respLineActive ? "0.38" : "0.07"} style={{ transition: "opacity 0.8s" }} />
-        <line x1="98%" y1="75%" x2="2%" y2="75%" stroke="#789D99" strokeWidth="1.2"
-          strokeDasharray="2000" strokeDashoffset={isRespSail && respShipLeft ? "0" : "2000"} opacity="0.45"
-          style={{ transition: isRespSail && respShipLeft ? `stroke-dashoffset ${PACE.sailing}ms linear` : "stroke-dashoffset 0ms" }} />
-        {respLineActive && (
-          <>
-            <line x1="70%" y1="73.2%" x2="68%" y2="75%" stroke="#789D99" strokeWidth="1" opacity="0.24" />
-            <line x1="68%" y1="75%" x2="70%" y2="76.8%" stroke="#789D99" strokeWidth="1" opacity="0.24" />
-            <line x1="40%" y1="73.2%" x2="38%" y2="75%" stroke="#789D99" strokeWidth="1" opacity="0.24" />
-            <line x1="38%" y1="75%" x2="40%" y2="76.8%" stroke="#789D99" strokeWidth="1" opacity="0.24" />
-          </>
-        )}
-        <line x1="0" y1="78%" x2="100%" y2="78%" stroke="#789D99" strokeWidth="0.5" opacity="0.15" />
-      </svg>
-
-      {/* INTRO */}
-      <div style={{
-        position: "absolute", inset: 0,
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        opacity: isIdle ? 1 : 0, transition: "opacity 0.9s",
-        pointerEvents: isIdle ? "auto" : "none",
-        zIndex: 20, padding: "0 32px",
-      }}>
-        <h1 style={{
-          fontFamily: "'Noto Serif JP', serif", fontSize: "clamp(18px, 1.9vw, 28px)",
-          fontWeight: 300, color: "#F1EFE8", letterSpacing: "0.04em",
-          lineHeight: 1.9, textAlign: "center", marginBottom: "20px",
-        }}>
-          ボタンの裏側では、<br />小さな通信が旅をしている。
-        </h1>
-        <p style={{
-          fontSize: "12px", color: "#9CA8AD", fontWeight: 300,
-          lineHeight: 2.1, textAlign: "center", marginBottom: "30px", maxWidth: "440px",
-        }}>
-          {webDemo
-            ? <>ボタン操作がHTTP通信になり、XDPで観測される流れを体験するWebデモです。<br />表示値は説明用サンプルで、展示本番では物理ボタンと実際の観測データを使います。</>
-            : <>物理ボタンの操作から生まれたHTTP通信を、XDPがカーネル入口で観測します。<br />操作と実際のパケットが結びつく瞬間を追いかけます。</>}
-        </p>
-        <button onClick={onLaunch}
-          style={{
-            border: "1px solid #789D99", padding: "13px 40px",
-            color: "#F1EFE8", fontSize: "13px", letterSpacing: "0.12em",
-            background: "transparent", cursor: "pointer",
-            transition: "border-color 0.3s, color 0.3s", outline: "none",
-            fontFamily: "'Noto Sans JP', sans-serif",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "#B89A6D"; e.currentTarget.style.color = "#B89A6D"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "#789D99"; e.currentTarget.style.color = "#F1EFE8"; }}>
-          通信の旅をはじめる
-        </button>
-        <div style={{ fontSize: "10px", color: "#9CA8AD", opacity: 0.4, marginTop: "10px" }}>
-          {webDemo ? "Webデモ · 専門知識は必要ありません" : "物理ボタンの操作でも開始できます"}
-        </div>
-      </div>
-
-      {/* CONTEXT PANEL (non-sailing, non-idle, non-complete phases) */}
-      {ctxPanel && (
-        <div style={{
-          position: "absolute", top: "6%", left: "8%", right: "8%",
-          zIndex: 15, pointerEvents: "auto",
-          background: "rgba(11,34,51,0.75)",
-          border: "1px solid rgba(120,157,153,0.18)",
-          maxHeight: "75%", overflowY: "auto",
-        }}>
-          {ctxPanel}
-        </div>
-      )}
-
-      {/* SAILING STATUS */}
-      <div style={{
-        position: "absolute", bottom: "18%", left: "50%", transform: "translateX(-50%)",
-        textAlign: "center", zIndex: 12, opacity: isSailing ? 1 : 0,
-        transition: "opacity 0.5s", pointerEvents: "none", whiteSpace: "nowrap",
-      }}>
-        {isReqSail && (
-          <>
-            <div style={{ fontSize: "11px", color: "#B89A6D", letterSpacing: "0.1em", marginBottom: "6px" }}>
-              リクエストを送信中 →
-            </div>
-            {!simpleMode && (
-              <div style={{ fontSize: "10px", fontFamily: "monospace", color: "#9CA8AD", lineHeight: 1.8 }}>
-                {packet.srcIp}:{packet.srcPort}<br />→ {packet.dstIp}:{packet.dstPort}
-              </div>
-            )}
-          </>
-        )}
-        {isRespSail && (
-          <>
-            <div style={{ fontSize: "11px", color: "#789D99", letterSpacing: "0.1em", marginBottom: "6px" }}>
-              ← レスポンスを送信中
-            </div>
-            {!simpleMode && (
-              <div style={{ fontSize: "10px", fontFamily: "monospace", color: "#9CA8AD", lineHeight: 1.8 }}>
-                {packet.dstIp}:{packet.dstPort}<br />→ {packet.srcIp}:{packet.srcPort}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* COMPLETION */}
-      <div style={{
-        position: "absolute", inset: 0,
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        opacity: isComplete ? 1 : 0, transition: "opacity 1s",
-        pointerEvents: "none", zIndex: 18, padding: "0 24px",
-      }}>
-        <p style={{
-          fontFamily: "'Noto Serif JP', serif", fontSize: "clamp(14px, 1.4vw, 18px)",
-          fontWeight: 300, color: "#F1EFE8", lineHeight: 1.9, textAlign: "center", marginBottom: "14px",
-        }}>
-          リクエストとレスポンスの往復が完了しました
-        </p>
-        <div style={{
-          fontSize: "11px", color: "#9CA8AD", lineHeight: 2, textAlign: "left",
-          maxWidth: "280px", marginBottom: "14px",
-        }}>
-          <div>あなたがしたこと：<span style={{ color: "#F1EFE8" }}>状態確認を押した</span></div>
-          <div>送信したリクエスト：<span style={{ color: "#F1EFE8", fontFamily: "monospace" }}>GET /health</span></div>
-          <div>入口での確認：<span style={{ color: "#F1EFE8" }}>パケットを検査し、<span style={{ fontFamily: "monospace" }}>{packet.xdpAction}</span> で通過させた</span></div>
-          <div>レスポンス（通信モデル）：<span style={{ color: "#B89A6D", fontFamily: "monospace" }}>200 OK</span></div>
-        </div>
-        <p style={{ fontSize: "10px", color: "#9CA8AD", lineHeight: 1.8, textAlign: "center", fontWeight: 300 }}>
-          つまり画面上の「押した」という操作はHTTPリクエストになり、<br />
-          TCP/IPをまとって進み、カーネル入口で観測できるパケットとして現れます。
-        </p>
-        {!simpleMode && (
-          <div style={{
-            marginTop: "12px", padding: "8px 14px",
-            border: "1px solid rgba(120,157,153,0.2)",
-            fontSize: "9px", fontFamily: "monospace", color: "#9CA8AD",
-            lineHeight: 1.9, textAlign: "center",
-          }}>
-            {packet.protocol}リクエスト {packet.srcIp}:{packet.srcPort} → {packet.dstIp}:{packet.dstPort}<br />
-            XDP ingress · {packet.xdpAction}<br />
-            HTTP Response 200 OK（通信モデル）
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VOYAGE LOG
-// ─────────────────────────────────────────────────────────────────────────────
-
-const TIMELINE = [
-  { label: "操作を検知",        tech: "L7 Application",       minIdx: 1 },
-  { label: "送る準備をする",    tech: "L7→L1 encapsulation",  minIdx: 7 },
-  { label: "ネットワークへ送信",tech: "TCP/IP送信",             minIdx: REQ_SAIL_IDX },
-  { label: "入口で確認",        tech: "XDP ingress",           minIdx: XDP_IDX },
-  { label: "リクエストを受信",  tech: "L1→L7 decapsulation",  minIdx: 17 },
-  { label: "サーバーが処理",    tech: "HTTP処理",              minIdx: SRV_PROC_IDX },
-  { label: "レスポンスを送信",  tech: "L7→L1 encapsulation",  minIdx: RESP_SAIL_IDX },
-  { label: "レスポンスが到着",  tech: "L1→L7 decapsulation",  minIdx: 34 },
-];
-
-function VoyageLog({ open, frameIdx, simpleMode, packet, webDemo }: {
-  open: boolean; frameIdx: number; simpleMode: boolean; packet: PacketInfo; webDemo: boolean;
-}) {
-  const [showDetail, setShowDetail] = useState(false);
-
-  return (
-    <div style={{
-      maxHeight: open ? "300px" : "0",
-      overflow: "hidden",
-      transition: "max-height 0.55s cubic-bezier(0.4,0,0.2,1)",
-      background: "#0D1E2A", borderTop: open ? "1px solid rgba(120,157,153,0.15)" : "none",
-    }}>
-      <div style={{ padding: "16px 24px 24px", display: "flex", gap: "24px", overflow: "auto" }}>
-        {/* Timeline */}
-        <div style={{ flexShrink: 0, minWidth: "150px" }}>
-          <div style={{ fontSize: "9px", letterSpacing: "0.2em", color: "#9CA8AD", textTransform: "uppercase", marginBottom: "10px" }}>
-            経過
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-            {TIMELINE.map((t, i) => {
-              const done = frameIdx >= t.minIdx;
-              return (
-                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "7px" }}>
-                  <div style={{
-                    width: "6px", height: "6px", borderRadius: "50%", flexShrink: 0, marginTop: "4px",
-                    background: done ? "#789D99" : "transparent",
-                    border: `1px solid ${done ? "#789D99" : "rgba(120,157,153,0.3)"}`,
-                  }} />
-                  <div>
-                    <div style={{ fontSize: "11px", color: done ? "#F1EFE8" : "#9CA8AD", opacity: done ? 1 : 0.45 }}>
-                      {t.label}
-                    </div>
-                    {!simpleMode && (
-                      <div style={{ fontSize: "8px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.45 }}>
-                        {t.tech}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Packet summary */}
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "9px", letterSpacing: "0.2em", color: "#9CA8AD", textTransform: "uppercase", marginBottom: "10px" }}>
-            通信の中身
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px", marginBottom: "14px" }}>
-            {[
-              ["リクエスト",   "GET /health",     null],
-              ["レスポンス（通信モデル）", "200 OK", null],
-              [`担当部署ラベル（L4・${webDemo ? "デモ" : "観測"}）`, `${packet.srcPort} → ${packet.dstPort}`, `${packet.protocol} ポート番号`],
-              [`宛先の住所（L3・${webDemo ? "デモ" : "観測"}）`, `${packet.srcIp} →\n${packet.dstIp}`, "IPアドレス"],
-              ["入口での確認結果", packet.xdpAction, null],
-              ["往復時間",         "—",               "未計測"],
-            ].map(([k, v, sub]) => (
-              <div key={k as string}>
-                <div style={{ fontSize: "9px", letterSpacing: "0.16em", color: "#9CA8AD", textTransform: "uppercase", marginBottom: "2px" }}>
-                  {k}
-                </div>
-                <div style={{ fontSize: "11px", color: "#F1EFE8", whiteSpace: "pre-line" }}>{v}</div>
-                {sub && (
-                  <div style={{ fontSize: "8px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.5 }}>{sub}</div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <button onClick={() => setShowDetail(d => !d)} style={linkBtnStyle}>
-            {showDetail ? "▲ 閉じる" : "▼ パケットの構造を見る"}
-          </button>
-          {showDetail && (
-            <div style={{
-              marginTop: "10px", padding: "10px 12px",
-              background: "rgba(0,0,0,0.2)", borderLeft: "2px solid rgba(120,157,153,0.3)",
-              fontSize: "10px", fontFamily: "monospace", color: "#9CA8AD", lineHeight: 2,
-            }}>
-              {simpleMode ? (
-                <>
-                  <div>近くの配送情報</div>
-                  <div style={{ paddingLeft: "12px" }}>└ 端末の住所</div>
-                  <div style={{ paddingLeft: "24px" }}>└ アプリ番号</div>
-                  <div style={{ paddingLeft: "36px" }}>└ GET /health</div>
-                </>
-              ) : (
-                <>
-                  <div>Ethernet フレーム（L2）</div>
-                  <div style={{ paddingLeft: "12px" }}>└ IP パケット（{packet.srcIp} → {packet.dstIp}）（L3）</div>
-                  <div style={{ paddingLeft: "24px" }}>└ {packet.protocol} セグメント（{packet.srcPort} → {packet.dstPort}）（L4）</div>
-                  <div style={{ paddingLeft: "36px" }}>└ HTTP GET /health（L7）</div>
-                  <div style={{ paddingLeft: "48px" }}>└ Payload: "状態確認"</div>
-                </>
-              )}
-              <div style={{ marginTop: "6px", opacity: 0.5, fontSize: "9px" }}>
-                ※ 通信モデル上の構造です。実際の観測値ではありません。
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// APP
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [frameIdx, setFrameIdx]           = useState(0);
-  const [playing, setPlaying]             = useState(false);
-  const [logOpen, setLogOpen]             = useState(false);
-  const [simpleMode, setSimpleMode]       = useState(true);
-  const [reqShipRight, setReqShipRight]   = useState(false);
-  const [respShipLeft, setRespShipLeft]   = useState(false);
-  const [packet, setPacket] = useState<PacketInfo>(DEFAULT_PACKET);
-  const [streamStatus, setStreamStatus] = useState("waiting");
-  const [pps, setPps] = useState(0);
-  const [total, setTotal] = useState(0);
+  const demo = isWebDemo();
+  const [streamStatus, setStreamStatus] = useState(demo ? "demo" : "waiting");
+  const [harbor, setHarbor] = useState<HarborState>(demo ? DEMO_STATE : INITIAL_STATE);
+  const [latencies, setLatencies] = useState<number[]>(demo ? [18, 15, 16, 14, 15, 13, 14] : []);
+  const [logs, setLogs] = useState<LogEntry[]>([
+    {
+      id: 1,
+      time: "--:--:--",
+      message: demo
+        ? "WEB展示見本を表示しています。数値は実機の出力例です。"
+        : "観測ノードからの接続を待っています。",
+      tone: "quiet",
+    },
+  ]);
 
-  const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevIdxRef = useRef(0);
-  const frameIdxRef = useRef(0);
-
-  const frame      = FRAMES[frameIdx];
-  const isComplete = frame.phase === "complete";
-  const webDemo = isWebDemo();
-
-  useEffect(() => {
-    frameIdxRef.current = frameIdx;
-  }, [frameIdx]);
+  function addLog(message: string, tone: LogEntry["tone"] = "quiet") {
+    setLogs(current =>
+      [
+        {
+          id: Date.now() + Math.random(),
+          time: nowLabel(),
+          message,
+          tone,
+        },
+        ...current,
+      ].slice(0, 6),
+    );
+  }
 
   useEffect(() => {
     let disposed = false;
     let unsubscribe: undefined | (() => void);
 
     void subscribeStream({
-      onStatus: status => !disposed && setStreamStatus(status),
-      onEvent: rawEvent => {
+      onStatus: status => {
+        if (!disposed) setStreamStatus(status);
+      },
+      onEvent: raw => {
         if (disposed) return;
-        const event = rawEvent as PacketEvent;
+        const event = raw as HarborEvent;
+
         if (event.type === "stats") {
-          setPps(Number(event.pps ?? 0));
-          setTotal(Number(event.total ?? 0));
-          return;
-        }
-        if (event.type === "physical_action") {
-          // 操作通知だけでは旅を開始しない。XDPで対象flowを実測し、
-          // action_correlatedを受け取ってから画面を進める。
-          setPacket(current => ({ ...current, operation: event.label ?? current.operation }));
-          setStreamStatus("correlating");
-          return;
-        }
-        if (event.type === "action_correlated") {
-          setPacket(current => ({
+          setHarbor(current => ({
             ...current,
-            operation: event.label ?? current.operation,
-            protocol: event.protocol ?? current.protocol,
-            srcIp: event.src ?? current.srcIp,
-            srcPort: Number(event.src_port ?? current.srcPort),
-            dstIp: event.dst ?? current.dstIp,
-            dstPort: Number(event.dst_port ?? current.dstPort),
-            xdpAction: "XDP_PASS",
+            mode: event.mode === "protect" ? "protect" : event.mode === "monitor" ? "monitor" : current.mode,
+            pps: Number(event.pps ?? current.pps),
+            total: Number(event.total ?? current.total),
+            passed: Number(event.pass ?? current.passed),
+            dropped: Number(event.drop ?? current.dropped),
           }));
-          setStreamStatus("observed");
-          if (frameIdxRef.current === 0 || frameIdxRef.current === FRAMES.length - 1) start();
+          return;
+        }
+
+        if (event.type === "traffic_health") {
+          const latency = Number(event.latency_ms ?? 0);
+          const success = Boolean(event.success);
+          setHarbor(current => ({
+            ...current,
+            healthSuccess: success,
+            latencyMs: latency,
+            statusCode: event.status_code == null ? null : Number(event.status_code),
+          }));
+          setLatencies(current => [...current, latency].slice(-30));
+          if (!success) addLog("通常航路のHTTP応答が途切れました。", "warn");
+          return;
+        }
+
+        if (event.type === "attack_state") {
+          const active = Boolean(event.active);
+          setHarbor(current => ({
+            ...current,
+            attackActive: active,
+            attackPps: Number(event.pps ?? 0),
+            attackPackets: Number(event.packets_sent ?? current.attackPackets),
+            attackPort: Number(event.dst_port ?? current.attackPort),
+            target: event.target ?? current.target,
+          }));
+          addLog(active ? "負荷航路からUDP通信が流れ始めました。" : "UDP負荷通信が停止しました。", active ? "warn" : "quiet");
+          return;
+        }
+
+        if (event.type === "defense_mode") {
+          const mode: HarborMode = event.mode === "protect" ? "protect" : "monitor";
+          setHarbor(current => ({
+            ...current,
+            mode,
+            attackPort: Number(event.dst_port ?? current.attackPort),
+          }));
+          addLog(
+            mode === "protect"
+              ? "港門を閉じました。指定UDPをカーネル入口で遮断します。"
+              : "港門を開きました。通信を観測のみ行います。",
+            mode === "protect" ? "drop" : "quiet",
+          );
+          return;
+        }
+
+        if (event.type === "flow" && (event.action === "DROP" || event.protocol === "TCP")) {
+          const route = `${event.src ?? "?"}:${event.src_port ?? "?"} → ${event.dst ?? "?"}:${event.dst_port ?? "?"}`;
+          addLog(
+            `${event.protocol ?? "IP"} ${route} / ${event.action ?? "PASS"}`,
+            event.action === "DROP" ? "drop" : "pass",
+          );
         }
       },
     }).then(subscription => {
@@ -1197,303 +277,173 @@ export default function App() {
     };
   }, []);
 
-  // Auto-advance
-  useEffect(() => {
-    if (!playing) return;
-    if (frame.dur === 0 || frameIdx >= FRAMES.length - 1) { setPlaying(false); return; }
-    timerRef.current = setTimeout(() => setFrameIdx(i => i + 1), frame.dur);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [frameIdx, playing, frame.dur]);
-
-  // Ship sailing trigger
-  useEffect(() => {
-    const prev = FRAMES[prevIdxRef.current];
-    prevIdxRef.current = frameIdx;
-    const entering = (id: string) => frame.id === id && prev.id !== id;
-    if (entering("req-sail")) {
-      setReqShipRight(false);
-      const t = setTimeout(() => setReqShipRight(true), 80);
-      return () => clearTimeout(t);
-    }
-    if (entering("resp-sail")) {
-      setRespShipLeft(false);
-      const t = setTimeout(() => setRespShipLeft(true), 80);
-      return () => clearTimeout(t);
-    }
-  }, [frameIdx, frame.id]);
-
-  function goTo(idx: number) {
-    const t = Math.max(0, Math.min(FRAMES.length - 1, idx));
-    if (t >= REQ_SAIL_IDX + 1)  setReqShipRight(true); else setReqShipRight(false);
-    if (t >= RESP_SAIL_IDX + 1) setRespShipLeft(true); else setRespShipLeft(false);
-    setFrameIdx(t); setPlaying(false);
-  }
-
-  function start() {
-    if (webDemo) {
-      setPacket(current => ({ ...current, srcPort: 52000 + Math.floor(Math.random() * 800) }));
-    }
-    setFrameIdx(1); setReqShipRight(false); setRespShipLeft(false);
-    setLogOpen(false); setPlaying(true);
-  }
-
-  function reset() {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setFrameIdx(0); setPlaying(false); setLogOpen(false);
-    setReqShipRight(false); setRespShipLeft(false);
-  }
-
-  function togglePlay() {
-    if (frameIdx === 0) { start(); return; }
-    if (isComplete) { reset(); return; }
-    setPlaying(p => !p);
-  }
-
-  const reqShipStyle: CSSProperties = {
-    position: "absolute", width: "200px", height: "64px",
-    bottom: "7%", left: reqShipRight ? "76%" : "3%",
-    transition: frame.phase === "req-sail" && reqShipRight ? `left ${PACE.sailing}ms cubic-bezier(0.3,0.05,0.45,1)` : "none",
-    zIndex: 12, opacity: frame.ship === "req" ? 1 : 0, pointerEvents: "none",
-  };
-
-  const respShipStyle: CSSProperties = {
-    position: "absolute", width: "200px", height: "64px",
-    bottom: "7%", left: respShipLeft ? "3%" : "76%",
-    transition: frame.phase === "resp-sail" && respShipLeft ? `left ${PACE.sailing}ms cubic-bezier(0.3,0.05,0.45,1)` : "none",
-    zIndex: 12, opacity: frame.ship === "resp" ? 1 : 0, pointerEvents: "none",
-  };
-
-  const labelBase: CSSProperties = {
-    position: "absolute", bottom: "calc(7% + 68px)",
-    width: "200px", textAlign: "center",
-    pointerEvents: "none", zIndex: 13,
-  };
-
-  // Quick-jump buttons config
-  const quickJumps = [
-    { label: "リクエスト",     sub: "HTTP",     idx: 1 },
-    { label: "XDP観測",        sub: "ingress",  idx: XDP_IDX },
-    { label: "レスポンス",     sub: "HTTP",     idx: SRV_PROC_IDX },
-  ];
+  const modeIsProtect = harbor.mode === "protect";
+  const healthLabel = harbor.healthSuccess ? "応答あり" : "応答なし";
+  const dropRatio = harbor.total > 0 ? (harbor.dropped / harbor.total) * 100 : 0;
+  const sceneClass = [
+    "harbor-scene",
+    harbor.attackActive ? "is-under-load" : "",
+    modeIsProtect ? "is-protecting" : "is-monitoring",
+    harbor.healthSuccess ? "health-up" : "health-down",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div style={{
-      display: "flex", flexDirection: "column", height: "100vh",
-      overflow: "hidden", background: "#0B2233", color: "#F1EFE8",
-      fontFamily: "'Noto Sans JP', 'Inter', sans-serif",
-    }}>
-      {/* ── HEADER ── */}
-      <header style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 20px", height: "48px", flexShrink: 0,
-        borderBottom: "1px solid rgba(120,157,153,0.15)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="7" stroke="#789D99" strokeWidth="0.7" />
-            <path d="M1 8 Q8 3.5 15 8" stroke="#789D99" strokeWidth="0.6" fill="none" />
-            <path d="M1 8 Q8 12.5 15 8" stroke="#789D99" strokeWidth="0.6" fill="none" />
-            <line x1="8" y1="1" x2="8" y2="15" stroke="#789D99" strokeWidth="0.4" />
-          </svg>
-          <span style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>Packet Journey</span>
-          <span style={{ fontSize: "9px", letterSpacing: "0.14em", color: "#9CA8AD", opacity: 0.6 }}>通信の旅</span>
+    <div className="harbor-app">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div>
+            <div className="brand-name">PACKET HARBOR</div>
+            <div className="brand-sub">通信を守る港</div>
+          </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ fontSize: "8px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.65, letterSpacing: "0.08em" }}>
-            {streamStatus.toUpperCase()} · {pps} PPS · {total} TOTAL
+        <div className="mode-indicator" aria-label={`現在の防御モード: ${harbor.mode}`}>
+          <span className="mode-title">XDP GATE</span>
+          <div className="mode-scale">
+            <span>MONITOR</span>
+            <i className={modeIsProtect ? "at-protect" : "at-monitor"} />
+            <span>PROTECT</span>
           </div>
-          {/* Mode toggle */}
-          <button
-            onClick={() => setSimpleMode(m => !m)}
-            style={{
-              fontSize: "10px", letterSpacing: "0.1em",
-              color: "#9CA8AD", background: "transparent",
-              border: "1px solid rgba(120,157,153,0.3)",
-              padding: "4px 10px", cursor: "pointer", fontFamily: "inherit",
-              transition: "color 0.2s, border-color 0.2s",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = "#F1EFE8"; e.currentTarget.style.borderColor = "rgba(120,157,153,0.6)"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "#9CA8AD"; e.currentTarget.style.borderColor = "rgba(120,157,153,0.3)"; }}
-          >
-            {simpleMode ? "OSI 7層を見る" : "4段階で見る"}
-          </button>
+        </div>
 
-          {frame.phase !== "idle" && (
-            <button onClick={reset}
-              style={{
-                fontSize: "9px", letterSpacing: "0.16em", color: "#9CA8AD",
-                textTransform: "uppercase", background: "transparent",
-                border: "none", cursor: "pointer", fontFamily: "inherit",
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = "#F1EFE8")}
-              onMouseLeave={e => (e.currentTarget.style.color = "#9CA8AD")}
-            >
-              最初から
-            </button>
-          )}
+        <div className="connection">
+          <span className={`connection-lamp connection-lamp--${streamStatus}`} />
+          <div>
+            <div>{demo ? "WEB展示見本" : "実機観測"}</div>
+            <small>{streamStatus.toUpperCase()}</small>
+          </div>
         </div>
       </header>
 
-      <div style={{
-        height: "28px", flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        borderBottom: "1px solid rgba(120,157,153,0.12)",
-        background: webDemo ? "rgba(184,154,109,0.05)" : "rgba(120,157,153,0.05)",
-        color: "#9CA8AD", fontSize: "9px", letterSpacing: "0.04em",
-      }}>
-        <span style={{ color: webDemo ? "#B89A6D" : "#789D99", marginRight: "8px", letterSpacing: "0.12em" }}>
-          {webDemo ? "WEB再現モード" : "実機観測モード"}
+      <div className="truth-strip">
+        <strong>{demo ? "SAMPLE" : "LIVE"}</strong>
+        <span>
+          {demo
+            ? "この画面の数値は表示見本です。実機版ではRaspberry PiとXDPのイベントだけを表示します。"
+            : "画面上の数値はRaspberry PiとXDPから届いた実測値です。"}
         </span>
-        {webDemo
-          ? "表示される通信情報は説明用サンプルです。展示本番では物理ボタンとeBPF/XDPの観測データを使います。"
-          : "Raspberry Piの物理操作と、eBPF/XDPが取得した観測値を表示しています。"}
       </div>
 
-      {/* ── MAIN SCENE ── */}
-      <main style={{
-        flex: 1, minHeight: 0,
-        display: "grid", gridTemplateColumns: "22% 56% 22%",
-        position: "relative",
-      }}>
-        <PortColumn side="client" frame={frame} simpleMode={simpleMode} packet={packet} />
-        <SeaCenter
-          frame={frame} packet={packet} webDemo={webDemo} onLaunch={start}
-          reqShipRight={reqShipRight} respShipLeft={respShipLeft}
-          simpleMode={simpleMode}
-        />
-        <PortColumn side="server" frame={frame} simpleMode={simpleMode} packet={packet} />
+      <main className={sceneClass}>
+        <section className="harbor-intro">
+          <p className="eyebrow">INGRESS OBSERVATION / XDP</p>
+          <h1>見えない通信は、<br />港の入口で選別される。</h1>
+          <p className="intro-copy">
+            正常なHTTPは通す。負荷UDPは入口で止める。<br />
+            ここで動くものは、すべて実際のパケットに結びついています。
+          </p>
+        </section>
 
-        {/* Request ship */}
-        <div style={reqShipStyle}><ShipSVG /></div>
-        {frame.phase === "req-sail" && (
-          <div style={{
-            ...labelBase,
-            left: reqShipRight ? "76%" : "3%",
-            transition: frame.phase === "req-sail" && reqShipRight ? `left ${PACE.sailing}ms cubic-bezier(0.3,0.05,0.45,1)` : "none",
-          }}>
-            <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>リクエストを送信中</div>
-            {!simpleMode && <div style={{ fontSize: "9px", color: "#B89A6D", letterSpacing: "0.12em", fontFamily: "monospace" }}>REQUEST</div>}
+        <section className="route-map" aria-label="通信経路">
+          <div className="route-side route-side--sender">
+            <span className="side-index">A</span>
+            <div className="side-name">送信側</div>
+            <div className="side-device">Raspberry Pi</div>
+            <div className="side-address">traffic-node</div>
           </div>
-        )}
 
-        {/* Response ship */}
-        <div style={respShipStyle}><ShipSVG flip /></div>
-        {frame.phase === "resp-sail" && (
-          <div style={{
-            ...labelBase,
-            left: respShipLeft ? "3%" : "76%",
-            transition: frame.phase === "resp-sail" && respShipLeft ? `left ${PACE.sailing}ms cubic-bezier(0.3,0.05,0.45,1)` : "none",
-          }}>
-            <div style={{ fontSize: "11px", color: "#F1EFE8", fontWeight: 300 }}>レスポンスを送信中</div>
-            <div style={{ fontSize: "8px", color: "#789D99", letterSpacing: "0.1em", fontFamily: "monospace" }}>通信モデル</div>
+          <div className="water">
+            <svg className="water-lines" viewBox="0 0 900 280" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M0 62 Q75 46 150 62 T300 62 T450 62 T600 62 T750 62 T900 62" />
+              <path d="M0 192 Q75 176 150 192 T300 192 T450 192 T600 192 T750 192 T900 192" />
+              <path d="M0 250 Q110 234 220 250 T440 250 T660 250 T880 250" />
+            </svg>
+
+            <div className="route route--normal">
+              <div className="route-label">
+                <strong>通常航路</strong>
+                <span>HTTP / TCP :8080</span>
+              </div>
+              <div className="route-rule" />
+              <div className="normal-vessel"><ShipMark /></div>
+              <div className="route-result route-result--normal">
+                <span>{healthLabel}</span>
+                <strong>{harbor.latencyMs || "—"}<small>ms</small></strong>
+              </div>
+            </div>
+
+            <div className="route route--attack">
+              <div className="route-label">
+                <strong>負荷航路</strong>
+                <span>UDP :{harbor.attackPort}</span>
+              </div>
+              <div className="route-rule" />
+              <div className="attack-stream" aria-hidden="true">
+                {Array.from({ length: 18 }).map((_, index) => (
+                  <i
+                    key={index}
+                    style={{ "--packet-index": index } as CSSProperties}
+                  />
+                ))}
+              </div>
+              {modeIsProtect && harbor.attackActive && (
+                <div className="stopped-packets" aria-hidden="true">
+                  {Array.from({ length: 7 }).map((_, index) => <i key={index} />)}
+                </div>
+              )}
+              <div className="route-result route-result--attack">
+                <span>{modeIsProtect ? "入口で遮断" : "観測して通過"}</span>
+                <strong>{formatCount(harbor.attackPps)}<small>pps</small></strong>
+              </div>
+            </div>
+
+            <div className="xdp-gate" aria-label={modeIsProtect ? "XDP防御中" : "XDP観測中"}>
+              <div className="gate-tower">
+                <span>XDP</span>
+                <strong>{modeIsProtect ? "防御" : "観測"}</strong>
+              </div>
+              <div className="gate-bars">
+                {Array.from({ length: 6 }).map((_, index) => <i key={index} />)}
+              </div>
+              <div className="gate-foot">KERNEL INGRESS</div>
+            </div>
           </div>
-        )}
+
+          <div className="route-side route-side--server">
+            <span className="side-index">B</span>
+            <div className="side-name">守られる側</div>
+            <div className="side-device">Raspberry Pi</div>
+            <div className="side-address">{harbor.target}</div>
+          </div>
+        </section>
       </main>
 
-      {/* ── CONTROL BAR ── */}
-      <div style={{
-        flexShrink: 0, height: "52px",
-        borderTop: "1px solid rgba(120,157,153,0.15)",
-        background: "#0D1E2A",
-        display: "flex", alignItems: "center",
-        padding: "0 16px", gap: "6px",
-      }}>
-        {frame.phase === "idle" ? (
-          <div style={{ width: "100%", textAlign: "center", fontSize: "10px", color: "#9CA8AD", opacity: 0.65 }}>
-            まず中央の「通信の旅をはじめる」を押してください
+      <section className="instrument-deck">
+        <div className="latency-panel">
+          <div className="instrument-heading">
+            <span>HTTP RESPONSE</span>
+            <strong>{harbor.healthSuccess ? "航路維持" : "応答断"}</strong>
           </div>
-        ) : (
-          <>
-        <button onClick={() => goTo(frameIdx - 1)} disabled={frameIdx <= 0} style={ctrlBtnSt(frameIdx <= 0)}>
-          <SkipBack size={12} />
-        </button>
-        <button onClick={togglePlay} style={ctrlBtnSt(false, true)}>
-          {playing ? <Pause size={13} /> : <Play size={13} />}
-        </button>
-        <button onClick={() => goTo(frameIdx + 1)} disabled={frameIdx >= FRAMES.length - 1} style={ctrlBtnSt(frameIdx >= FRAMES.length - 1)}>
-          <SkipForward size={12} />
-        </button>
-
-        {/* Progress */}
-        <div style={{ flex: "0 0 80px", height: "2px", background: "rgba(120,157,153,0.15)", position: "relative", margin: "0 8px" }}>
-          <div style={{
-            position: "absolute", left: 0, top: 0, height: "100%",
-            width: `${(frameIdx / (FRAMES.length - 1)) * 100}%`,
-            background: "#789D99", transition: "width 0.4s",
-          }} />
+          <LatencyTrace values={latencies} />
+          <div className="trace-caption">直近30回の応答時間 / {harbor.statusCode ?? "—"} STATUS</div>
         </div>
 
-        {/* Step label */}
-        <div style={{ fontSize: "11px", color: "#9CA8AD", minWidth: "140px", whiteSpace: "nowrap" }}>
-          {frame.labelJa}
+        <Meter label="現在の流量" value={formatCount(harbor.pps)} unit="pps" note="XDP入口で観測" />
+        <Meter label="通過" value={formatCount(harbor.passed)} note="XDP_PASS" tone="pass" />
+        <Meter label="遮断" value={formatCount(harbor.dropped)} note={`XDP_DROP / ${dropRatio.toFixed(1)}%`} tone="drop" />
+
+        <div className="logbook">
+          <div className="instrument-heading">
+            <span>HARBOR LOG</span>
+            <strong>航海日誌</strong>
+          </div>
+          <ol>
+            {logs.map(entry => (
+              <li key={entry.id} className={`log--${entry.tone}`}>
+                <time>{entry.time}</time>
+                <span>{entry.message}</span>
+              </li>
+            ))}
+          </ol>
         </div>
-
-        <div style={{ marginLeft: "auto", display: "flex", gap: "4px", alignItems: "center" }}>
-          {/* Quick jumps */}
-          {quickJumps.map(q => (
-            <button key={q.idx} onClick={() => goTo(q.idx)} style={{
-              background: "transparent",
-              border: "1px solid rgba(120,157,153,0.2)",
-              color: "#9CA8AD", cursor: "pointer",
-              padding: "3px 8px", fontFamily: "inherit",
-              display: "flex", flexDirection: "column", alignItems: "center", gap: "0",
-            }}>
-              <span style={{ fontSize: "9px", letterSpacing: "0.06em" }}>{q.label}</span>
-              {!simpleMode && (
-                <span style={{ fontSize: "7px", fontFamily: "monospace", color: "#9CA8AD", opacity: 0.5 }}>{q.sub}</span>
-              )}
-            </button>
-          ))}
-
-          {isComplete && (
-            <>
-              <button
-                onClick={() => setLogOpen(o => !o)}
-                style={{ ...ctrlBtnSt(false), display: "flex", alignItems: "center", gap: "4px", padding: "4px 8px", marginLeft: "6px" }}>
-                {logOpen ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
-                <span style={{ fontSize: "9px", letterSpacing: "0.1em" }}>詳細を見る</span>
-              </button>
-              <button onClick={start} style={{ ...ctrlBtnSt(false), display: "flex", alignItems: "center", gap: "4px", padding: "4px 10px" }}>
-                <RotateCcw size={11} />
-                <span style={{ fontSize: "9px" }}>もう一度</span>
-              </button>
-            </>
-          )}
-        </div>
-          </>
-        )}
-      </div>
-
-      {/* ── VOYAGE LOG ── */}
-      <VoyageLog open={logOpen} frameIdx={frameIdx} simpleMode={simpleMode} packet={packet} webDemo={webDemo} />
-
-      <style>{`
-        @keyframes fadeSlide {
-          from { opacity: 0; transform: translateY(4px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+      </section>
     </div>
   );
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-function ctrlBtnSt(disabled: boolean, primary?: boolean): CSSProperties {
-  return {
-    background: "transparent",
-    border: `1px solid ${primary ? "rgba(120,157,153,0.4)" : "rgba(120,157,153,0.2)"}`,
-    color: disabled ? "rgba(156,168,173,0.28)" : "#9CA8AD",
-    cursor: disabled ? "default" : "pointer",
-    padding: "5px 7px",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    transition: "color 0.2s, border-color 0.2s",
-    fontFamily: "inherit",
-  };
-}
-
-const linkBtnStyle: CSSProperties = {
-  fontSize: "9px", letterSpacing: "0.16em", color: "#9CA8AD",
-  background: "transparent", border: "1px solid rgba(120,157,153,0.22)",
-  padding: "4px 10px", cursor: "pointer", fontFamily: "inherit",
-};
