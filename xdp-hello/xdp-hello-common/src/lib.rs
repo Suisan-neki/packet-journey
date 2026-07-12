@@ -34,6 +34,7 @@ pub const fn packet_action(
     }
 }
 
+/// 負荷通信は64パケットに1件だけRingBufへ送り、集計は全件を保持する。
 pub const ATTACK_FLOW_SAMPLE_EVERY: u64 = 64;
 
 pub const fn should_emit_flow_sample(
