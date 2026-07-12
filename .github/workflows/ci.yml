@@ -33,3 +33,18 @@ jobs:
       - name: Build
         working-directory: dashboard
         run: npm run build
+
+  xdp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - name: Install bpf-linker
+        run: cargo install bpf-linker
+      - name: Test shared XDP policy
+        run: cargo test --manifest-path xdp-hello/Cargo.toml -p xdp-hello-common
+      - name: Build XDP workspace
+        run: cargo build --manifest-path xdp-hello/Cargo.toml

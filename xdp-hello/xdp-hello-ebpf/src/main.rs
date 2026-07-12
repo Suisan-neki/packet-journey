@@ -5,12 +5,16 @@ use aya_ebpf::{
     bindings::{BPF_ANY, xdp_action},
     helpers::bpf_ktime_get_ns,
     macros::{map, xdp},
-    maps::{HashMap, RingBuf},
+    maps::{Array, HashMap, PerCpuArray, RingBuf},
     programs::XdpContext,
 };
 use aya_log_ebpf::{info, warn};
 use core::mem;
-use xdp_hello_common::{EVENT_KIND_FLOW, EVENT_KIND_RATE_ALERT, FlowEvent};
+use xdp_hello_common::{
+    CONFIG_BLOCKED_UDP_PORT_INDEX, CONFIG_MODE_INDEX, COUNTER_DROP_INDEX, COUNTER_PASS_INDEX,
+    EVENT_KIND_FLOW, EVENT_KIND_RATE_ALERT, FlowEvent, PACKET_ACTION_DROP,
+    PACKET_ACTION_PASS, packet_action, should_emit_flow_sample,
+};
 
 const ETH_HDR_LEN: usize = 14;
 const ETH_P_IP: u16 = 0x0800;
@@ -40,6 +44,14 @@ struct PacketWindow {
 
 #[map]
 static EVENTS: RingBuf = RingBuf::with_byte_size(1 << 20, 0);
+
+/// index 0: defense mode, index 1: blocked UDP destination port.
+#[map]
+static DEFENSE_CONFIG: Array<u32> = Array::with_max_entries(2, 0);
+
+/// index 0: XDP_PASS, index 1: XDP_DROP. CPUごとに競合せず加算する。
+#[map]
+static COUNTERS: PerCpuArray<u64> = PerCpuArray::with_max_entries(2, 0);
 
 #[map]
 static PACKET_WINDOWS: HashMap<u32, PacketWindow> = HashMap::with_max_entries(1024, 0);
@@ -82,7 +94,14 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
         IPPROTO_ICMP => {
             let icmp = ptr_at::<u8>(&ctx, transport_offset)?;
             let icmp_type = unsafe { *icmp };
-            emit_flow_event(src_addr, dst_addr, 0, 0, IPPROTO_ICMP);
+            record_packet(
+                src_addr,
+                dst_addr,
+                0,
+                0,
+                IPPROTO_ICMP,
+                PACKET_ACTION_PASS,
+            );
             info!(
                 &ctx,
                 "received IPv4 ICMP packet: src={}.{}.{}.{}, dst={}.{}.{}.{}, type={}",
@@ -102,7 +121,14 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
             let src_port = read_be_u16_at(ports);
             let dst_port = read_be_u16_at(unsafe { ports.add(2) });
             let tcp_data_offset = read_u8(&ctx, TCP_DATA_OFFSET_OFFSET)? >> 4;
-            emit_flow_event(src_addr, dst_addr, src_port, dst_port, IPPROTO_TCP);
+            record_packet(
+                src_addr,
+                dst_addr,
+                src_port,
+                dst_port,
+                IPPROTO_TCP,
+                PACKET_ACTION_PASS,
+            );
             info!(
                 &ctx,
                 "received IPv4 TCP packet: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
@@ -130,10 +156,11 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
             let ports = ptr_at::<[u8; 4]>(&ctx, transport_offset)? as *const u8;
             let src_port = read_be_u16_at(ports);
             let dst_port = read_be_u16_at(unsafe { ports.add(2) });
-            emit_flow_event(src_addr, dst_addr, src_port, dst_port, IPPROTO_UDP);
+            let action = udp_action(dst_port);
+            record_packet(src_addr, dst_addr, src_port, dst_port, IPPROTO_UDP, action);
             info!(
                 &ctx,
-                "received IPv4 UDP packet: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}",
+                "received IPv4 UDP packet: src={}.{}.{}.{}:{}, dst={}.{}.{}.{}:{}, action={}",
                 src_addr[0],
                 src_addr[1],
                 src_addr[2],
@@ -143,8 +170,12 @@ fn try_xdp_hello(ctx: XdpContext) -> Result<u32, u32> {
                 dst_addr[1],
                 dst_addr[2],
                 dst_addr[3],
-                dst_port
+                dst_port,
+                action
             );
+            if action == PACKET_ACTION_DROP {
+                return Ok(xdp_action::XDP_DROP);
+            }
         }
         _ => info!(&ctx, "received IPv4 packet with other protocol"),
     }
@@ -265,13 +296,54 @@ fn log_http_method(
 }
 
 #[inline(always)]
-fn emit_flow_event(
+fn udp_action(dst_port: u16) -> u8 {
+    let mode = DEFENSE_CONFIG
+        .get(CONFIG_MODE_INDEX)
+        .copied()
+        .unwrap_or_default();
+    let blocked_port = DEFENSE_CONFIG
+        .get(CONFIG_BLOCKED_UDP_PORT_INDEX)
+        .copied()
+        .unwrap_or_default();
+
+    packet_action(mode, IPPROTO_UDP, dst_port, blocked_port)
+}
+
+#[inline(always)]
+fn increment_counter(action: u8) -> u64 {
+    let index = if action == PACKET_ACTION_DROP {
+        COUNTER_DROP_INDEX
+    } else {
+        COUNTER_PASS_INDEX
+    };
+    if let Some(value) = COUNTERS.get_ptr_mut(index) {
+        unsafe {
+            *value += 1;
+            *value
+        }
+    } else {
+        0
+    }
+}
+
+#[inline(always)]
+fn record_packet(
     src_addr: [u8; 4],
     dst_addr: [u8; 4],
     src_port: u16,
     dst_port: u16,
     protocol: u8,
+    action: u8,
 ) {
+    let packet_count = increment_counter(action);
+    let blocked_port = DEFENSE_CONFIG
+        .get(CONFIG_BLOCKED_UDP_PORT_INDEX)
+        .copied()
+        .unwrap_or_default();
+    if !should_emit_flow_sample(protocol, dst_port, blocked_port, packet_count) {
+        return;
+    }
+
     let Some(mut entry) = EVENTS.reserve::<FlowEvent>(0) else {
         return;
     };
@@ -279,7 +351,8 @@ fn emit_flow_event(
     entry.write(FlowEvent {
         kind: EVENT_KIND_FLOW,
         protocol,
-        _pad: [0; 2],
+        action,
+        _pad: 0,
         src_addr,
         dst_addr,
         src_port,
@@ -298,7 +371,8 @@ fn emit_rate_alert(dst_addr: [u8; 4], rate: u32) {
     entry.write(FlowEvent {
         kind: EVENT_KIND_RATE_ALERT,
         protocol: 0,
-        _pad: [0; 2],
+        action: PACKET_ACTION_PASS,
+        _pad: 0,
         src_addr: [0; 4],
         dst_addr,
         src_port: 0,
