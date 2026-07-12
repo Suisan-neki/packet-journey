@@ -13,7 +13,7 @@ use core::mem;
 use xdp_hello_common::{
     CONFIG_BLOCKED_UDP_PORT_INDEX, CONFIG_MODE_INDEX, COUNTER_DROP_INDEX, COUNTER_PASS_INDEX,
     EVENT_KIND_FLOW, EVENT_KIND_RATE_ALERT, FlowEvent, PACKET_ACTION_DROP,
-    PACKET_ACTION_PASS, packet_action,
+    PACKET_ACTION_PASS, packet_action, should_emit_flow_sample,
 };
 
 const ETH_HDR_LEN: usize = 14;
@@ -310,7 +310,7 @@ fn udp_action(dst_port: u16) -> u8 {
 }
 
 #[inline(always)]
-fn increment_counter(action: u8) {
+fn increment_counter(action: u8) -> u64 {
     let index = if action == PACKET_ACTION_DROP {
         COUNTER_DROP_INDEX
     } else {
@@ -319,7 +319,10 @@ fn increment_counter(action: u8) {
     if let Some(value) = COUNTERS.get_ptr_mut(index) {
         unsafe {
             *value += 1;
+            *value
         }
+    } else {
+        0
     }
 }
 
@@ -332,7 +335,14 @@ fn record_packet(
     protocol: u8,
     action: u8,
 ) {
-    increment_counter(action);
+    let packet_count = increment_counter(action);
+    let blocked_port = DEFENSE_CONFIG
+        .get(CONFIG_BLOCKED_UDP_PORT_INDEX)
+        .copied()
+        .unwrap_or_default();
+    if !should_emit_flow_sample(protocol, dst_port, blocked_port, packet_count) {
+        return;
+    }
 
     let Some(mut entry) = EVENTS.reserve::<FlowEvent>(0) else {
         return;
