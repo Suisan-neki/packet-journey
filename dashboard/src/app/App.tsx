@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isWebDemo, subscribeStream } from "../stream.js";
 
 type HarborMode = "monitor" | "protect";
@@ -131,31 +131,6 @@ function LatencyTrace({ values }: { values: number[] }) {
   );
 }
 
-function Meter({
-  label,
-  value,
-  unit,
-  note,
-  tone = "plain",
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  note: string;
-  tone?: "plain" | "pass" | "drop";
-}) {
-  return (
-    <section className={`meter meter--${tone}`}>
-      <div className="meter-label">{label}</div>
-      <div className="meter-reading">
-        <span>{value}</span>
-        {unit && <small>{unit}</small>}
-      </div>
-      <div className="meter-note">{note}</div>
-    </section>
-  );
-}
-
 export default function App() {
   const demo = isWebDemo();
   const [streamStatus, setStreamStatus] = useState(demo ? "demo" : "waiting");
@@ -182,7 +157,7 @@ export default function App() {
           tone,
         },
         ...current,
-      ].slice(0, 6),
+      ].slice(0, 4),
     );
   }
 
@@ -220,7 +195,7 @@ export default function App() {
             statusCode: event.status_code == null ? null : Number(event.status_code),
           }));
           setLatencies(current => [...current, latency].slice(-30));
-          if (!success) addLog("通常航路のHTTP応答が途切れました。", "warn");
+          if (!success) addLog("通常HTTPの応答が途切れました。", "warn");
           return;
         }
 
@@ -234,7 +209,7 @@ export default function App() {
             attackPort: Number(event.dst_port ?? current.attackPort),
             target: event.target ?? current.target,
           }));
-          addLog(active ? "負荷航路からUDP通信が流れ始めました。" : "UDP負荷通信が停止しました。", active ? "warn" : "quiet");
+          addLog(active ? "UDP負荷通信を開始しました。" : "UDP負荷通信を停止しました。", active ? "warn" : "quiet");
           return;
         }
 
@@ -247,8 +222,8 @@ export default function App() {
           }));
           addLog(
             mode === "protect"
-              ? "港門を閉じました。指定UDPをカーネル入口で遮断します。"
-              : "港門を開きました。通信を観測のみ行います。",
+              ? "PROTECTへ変更。指定UDPをXDP_DROPします。"
+              : "MONITORへ変更。パケットを観測して通過させます。",
             mode === "protect" ? "drop" : "quiet",
           );
           return;
@@ -278,161 +253,248 @@ export default function App() {
   }, []);
 
   const modeIsProtect = harbor.mode === "protect";
-  const healthLabel = harbor.healthSuccess ? "応答あり" : "応答なし";
   const dropRatio = harbor.total > 0 ? (harbor.dropped / harbor.total) * 100 : 0;
-  const sceneClass = [
-    "harbor-scene",
-    harbor.attackActive ? "is-under-load" : "",
-    modeIsProtect ? "is-protecting" : "is-monitoring",
-    harbor.healthSuccess ? "health-up" : "health-down",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const hasLatency = harbor.latencyMs > 0;
+  const conclusion = harbor.attackActive
+    ? modeIsProtect
+      ? harbor.healthSuccess
+        ? `指定UDPをXDPで遮断中。HTTPは${harbor.statusCode ?? "—"} / ${harbor.latencyMs || "—"}msで応答しています。`
+        : "指定UDPをXDPで遮断中ですが、HTTP応答を確認できません。"
+      : "UDP負荷を観測しています。MONITORでは遮断せず、サーバーへ通過させます。"
+    : harbor.healthSuccess
+      ? `UDP負荷は停止中。HTTPは${harbor.statusCode ?? "—"} / ${harbor.latencyMs || "—"}msで応答しています。`
+      : "UDP負荷は停止中。HTTP応答を待っています。";
 
   return (
-    <div className="harbor-app">
+    <div className="demo-app">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
+          <div className="brand-ship"><ShipMark /></div>
           <div>
             <div className="brand-name">PACKET HARBOR</div>
-            <div className="brand-sub">通信を守る港</div>
+            <div className="brand-sub">Raspberry Pi × Rust × eBPF/XDP</div>
           </div>
         </div>
 
-        <div className="mode-indicator" aria-label={`現在の防御モード: ${harbor.mode}`}>
-          <span className="mode-title">XDP GATE</span>
-          <div className="mode-scale">
-            <span>MONITOR</span>
-            <i className={modeIsProtect ? "at-protect" : "at-monitor"} />
-            <span>PROTECT</span>
+        <div className="run-state">
+          <div className="state-item">
+            <span>表示</span>
+            <strong>{demo ? "SAMPLE" : "LIVE"}</strong>
           </div>
-        </div>
-
-        <div className="connection">
-          <span className={`connection-lamp connection-lamp--${streamStatus}`} />
-          <div>
-            <div>{demo ? "WEB展示見本" : "実機観測"}</div>
-            <small>{streamStatus.toUpperCase()}</small>
+          <div className="state-item">
+            <span>防御モード</span>
+            <strong className={modeIsProtect ? "text-drop" : ""}>{harbor.mode.toUpperCase()}</strong>
+          </div>
+          <div className="state-item">
+            <span>接続</span>
+            <strong>{streamStatus.toUpperCase()}</strong>
           </div>
         </div>
       </header>
 
-      <div className="truth-strip">
-        <strong>{demo ? "SAMPLE" : "LIVE"}</strong>
-        <span>
-          {demo
-            ? "この画面の数値は表示見本です。実機版ではRaspberry PiとXDPのイベントだけを表示します。"
-            : "画面上の数値はRaspberry PiとXDPから届いた実測値です。"}
-        </span>
+      <div className="truth-note">
+        {demo
+          ? "公開ページは実機出力の表示例です。LIVE版では、以下の数値を2台のRaspberry PiとXDPから受信します。"
+          : "この画面は、2台のRaspberry PiとXDPから受信した実測値だけで更新されています。"}
       </div>
 
-      <main className={sceneClass}>
-        <section className="harbor-intro">
-          <p className="eyebrow">INGRESS OBSERVATION / XDP</p>
-          <h1>見えない通信は、<br />港の入口で選別される。</h1>
-          <p className="intro-copy">
-            正常なHTTPは通す。負荷UDPは入口で止める。<br />
-            ここで動くものは、すべて実際のパケットに結びついています。
+      <main>
+        <section className="answer">
+          <div className="answer-label">この実験から、いま分かること</div>
+          <h1>{conclusion}</h1>
+          <p>
+            左から順に、<strong>送った通信</strong>、<strong>カーネル入口の判断</strong>、
+            <strong>サービスへの影響</strong>を確認してください。
           </p>
         </section>
 
-        <section className="route-map" aria-label="通信経路">
-          <div className="route-side route-side--sender">
-            <span className="side-index">A</span>
-            <div className="side-name">送信側</div>
-            <div className="side-device">Raspberry Pi</div>
-            <div className="side-address">traffic-node</div>
+        <section className="causal-flow" aria-label="実験の因果関係">
+          <article className="stage stage--input">
+            <header className="stage-head">
+              <span className="step-number">1</span>
+              <div>
+                <p>INPUT</p>
+                <h2>何を送ったか</h2>
+              </div>
+            </header>
+
+            <div className="source-node">
+              <strong>Raspberry Pi A</strong>
+              <span>traffic-node</span>
+            </div>
+
+            <div className="traffic-line traffic-line--normal">
+              <div>
+                <span>通常通信</span>
+                <strong>HTTP / TCP :8080</strong>
+              </div>
+              <em>{harbor.healthSuccess ? "送信中" : "応答待ち"}</em>
+            </div>
+
+            <div className="traffic-line traffic-line--attack">
+              <div>
+                <span>負荷通信</span>
+                <strong>UDP :{harbor.attackPort}</strong>
+              </div>
+              <em>{harbor.attackActive ? `${formatCount(harbor.attackPps)} pps` : "停止中"}</em>
+            </div>
+
+            <dl className="detail-list">
+              <div><dt>送信済みUDP</dt><dd>{formatCount(harbor.attackPackets)} packets</dd></div>
+              <div><dt>送信先</dt><dd>{harbor.target}</dd></div>
+            </dl>
+
+            <p className="stage-source">
+              取得元: <code>traffic-node</code> の <code>attack_state</code>
+            </p>
+          </article>
+
+          <div className="flow-arrow" aria-hidden="true">
+            <span>NICへ到着</span>
+            <i />
           </div>
 
-          <div className="water">
-            <svg className="water-lines" viewBox="0 0 900 280" preserveAspectRatio="none" aria-hidden="true">
-              <path d="M0 62 Q75 46 150 62 T300 62 T450 62 T600 62 T750 62 T900 62" />
-              <path d="M0 192 Q75 176 150 192 T300 192 T450 192 T600 192 T750 192 T900 192" />
-              <path d="M0 250 Q110 234 220 250 T440 250 T660 250 T880 250" />
-            </svg>
-
-            <div className="route route--normal">
-              <div className="route-label">
-                <strong>通常航路</strong>
-                <span>HTTP / TCP :8080</span>
+          <article className="stage stage--xdp">
+            <header className="stage-head">
+              <span className="step-number">2</span>
+              <div>
+                <p>DECISION</p>
+                <h2>XDPがどう判断したか</h2>
               </div>
-              <div className="route-rule" />
-              <div className="normal-vessel"><ShipMark /></div>
-              <div className="route-result route-result--normal">
-                <span>{healthLabel}</span>
-                <strong>{harbor.latencyMs || "—"}<small>ms</small></strong>
+            </header>
+
+            <div className="hook-position">
+              <span>NIC</span>
+              <i />
+              <strong>XDP HOOK</strong>
+              <i />
+              <span>Linux network stack</span>
+            </div>
+
+            <div className="mode-reading">
+              <span>現在のポリシー</span>
+              <strong>{modeIsProtect ? "指定UDPを入口で破棄" : "観測して通過"}</strong>
+              <code>{modeIsProtect ? "XDP_DROP" : "XDP_PASS"}</code>
+            </div>
+
+            <div className="counter-grid">
+              <div>
+                <span>入口の流量</span>
+                <strong>{formatCount(harbor.pps)} <small>pps</small></strong>
+              </div>
+              <div className="counter-pass">
+                <span>通過</span>
+                <strong>{formatCount(harbor.passed)}</strong>
+                <small>XDP_PASS</small>
+              </div>
+              <div className="counter-drop">
+                <span>遮断</span>
+                <strong>{formatCount(harbor.dropped)}</strong>
+                <small>XDP_DROP / {dropRatio.toFixed(1)}%</small>
               </div>
             </div>
 
-            <div className="route route--attack">
-              <div className="route-label">
-                <strong>負荷航路</strong>
-                <span>UDP :{harbor.attackPort}</span>
-              </div>
-              <div className="route-rule" />
-              <div className="attack-stream" aria-hidden="true">
-                {Array.from({ length: 18 }).map((_, index) => (
-                  <i
-                    key={index}
-                    style={{ "--packet-index": index } as CSSProperties}
-                  />
-                ))}
-              </div>
-              {modeIsProtect && harbor.attackActive && (
-                <div className="stopped-packets" aria-hidden="true">
-                  {Array.from({ length: 7 }).map((_, index) => <i key={index} />)}
-                </div>
-              )}
-              <div className="route-result route-result--attack">
-                <span>{modeIsProtect ? "入口で遮断" : "観測して通過"}</span>
-                <strong>{formatCount(harbor.attackPps)}<small>pps</small></strong>
-              </div>
-            </div>
+            <p className="technical-note">
+              パケットがソケットやアプリへ届く前のXDPフックで判定。
+              カウンタは<strong>per-CPU BPF map</strong>から集計します。
+            </p>
+            <p className="stage-source">
+              取得元: XDPプログラムの <code>stats</code>
+            </p>
+          </article>
 
-            <div className="xdp-gate" aria-label={modeIsProtect ? "XDP防御中" : "XDP観測中"}>
-              <div className="gate-tower">
-                <span>XDP</span>
-                <strong>{modeIsProtect ? "防御" : "観測"}</strong>
-              </div>
-              <div className="gate-bars">
-                {Array.from({ length: 6 }).map((_, index) => <i key={index} />)}
-              </div>
-              <div className="gate-foot">KERNEL INGRESS</div>
-            </div>
+          <div className="flow-arrow" aria-hidden="true">
+            <span>通過分のみ</span>
+            <i />
           </div>
 
-          <div className="route-side route-side--server">
-            <span className="side-index">B</span>
-            <div className="side-name">守られる側</div>
-            <div className="side-device">Raspberry Pi</div>
-            <div className="side-address">{harbor.target}</div>
+          <article className="stage stage--result">
+            <header className="stage-head">
+              <span className="step-number">3</span>
+              <div>
+                <p>OUTCOME</p>
+                <h2>サービスは維持できたか</h2>
+              </div>
+            </header>
+
+            <div className={`service-result ${harbor.healthSuccess ? "service-result--up" : "service-result--down"}`}>
+              <span>Raspberry Pi B / HTTP :8080</span>
+              <strong>{harbor.healthSuccess ? "応答を維持" : "応答なし"}</strong>
+            </div>
+
+            <div className="http-reading">
+              <div>
+                <span>HTTP status</span>
+                <strong>{harbor.statusCode ?? "—"}</strong>
+              </div>
+              <div>
+                <span>応答時間</span>
+                <strong>{hasLatency ? harbor.latencyMs : "—"} <small>ms</small></strong>
+              </div>
+            </div>
+
+            <LatencyTrace values={latencies} />
+            <p className="trace-caption">直近30回のHTTP GET応答時間</p>
+
+            <p className="technical-note">
+              UDP負荷とは別にHTTP GETを継続し、遮断中も本来のサービスが応答できるか確認します。
+            </p>
+            <p className="stage-source">
+              取得元: <code>traffic-node</code> の <code>traffic_health</code>
+            </p>
+          </article>
+        </section>
+
+        <section className="reading-guide">
+          <div className="guide-title">
+            <span>TECHNICAL READING</span>
+            <h2>数値が証明していること</h2>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>観測値</th>
+                <th>取得場所</th>
+                <th>この値から分かること</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>UDP pps / packets</td>
+                <td>送信側 Raspberry Pi</td>
+                <td>負荷通信を実際に生成している</td>
+              </tr>
+              <tr>
+                <td>XDP_PASS / XDP_DROP</td>
+                <td>受信側カーネルのper-CPU BPF map</td>
+                <td>入口で通過・破棄した実パケット数</td>
+              </tr>
+              <tr>
+                <td>HTTP status / latency</td>
+                <td>送信側から受信側へのHTTP GET</td>
+                <td>防御中も本来のサービスが利用可能か</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="mode-comparison">
+            <div className={!modeIsProtect ? "is-current" : ""}>
+              <span>MONITOR</span>
+              <strong>観測する</strong>
+              <p>統計を取り、パケットはサーバーへ通過させる。</p>
+            </div>
+            <div className={modeIsProtect ? "is-current" : ""}>
+              <span>PROTECT</span>
+              <strong>入口で止める</strong>
+              <p>指定UDPをXDP_DROPし、アプリへ到達させない。</p>
+            </div>
           </div>
         </section>
-      </main>
 
-      <section className="instrument-deck">
-        <div className="latency-panel">
-          <div className="instrument-heading">
-            <span>HTTP RESPONSE</span>
-            <strong>{harbor.healthSuccess ? "航路維持" : "応答断"}</strong>
-          </div>
-          <LatencyTrace values={latencies} />
-          <div className="trace-caption">直近30回の応答時間 / {harbor.statusCode ?? "—"} STATUS</div>
-        </div>
-
-        <Meter label="現在の流量" value={formatCount(harbor.pps)} unit="pps" note="XDP入口で観測" />
-        <Meter label="通過" value={formatCount(harbor.passed)} note="XDP_PASS" tone="pass" />
-        <Meter label="遮断" value={formatCount(harbor.dropped)} note={`XDP_DROP / ${dropRatio.toFixed(1)}%`} tone="drop" />
-
-        <div className="logbook">
-          <div className="instrument-heading">
-            <span>HARBOR LOG</span>
-            <strong>航海日誌</strong>
+        <section className="event-log">
+          <div>
+            <span>RECENT EVENTS</span>
+            <h2>直近の状態変化</h2>
           </div>
           <ol>
             {logs.map(entry => (
@@ -442,8 +504,9 @@ export default function App() {
               </li>
             ))}
           </ol>
-        </div>
-      </section>
+        </section>
+      </main>
     </div>
   );
 }
+
