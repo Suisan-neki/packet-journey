@@ -120,6 +120,7 @@ mod tests {
     fn sample_flow(src: &str) -> FlowEvent {
         FlowEvent {
             protocol: "TCP".to_string(),
+            action: Some("PASS".to_string()),
             src: src.to_string(),
             src_port: 52341,
             dst: "192.168.1.10".to_string(),
@@ -153,6 +154,7 @@ mod tests {
 
         let outputs = engine.ingest(&UpstreamEvent::Flow(FlowEvent {
             protocol: "TCP".to_string(),
+            action: Some("PASS".to_string()),
             src: "192.168.1.50".to_string(),
             src_port: 52341,
             dst: "192.168.1.10".to_string(),
