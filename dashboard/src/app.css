@@ -295,7 +295,7 @@ kbd {
 .live-experiment {
   min-height: 0;
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   gap: 22px;
   padding: 16px 20px;
   background: #f1efe8;
@@ -321,6 +321,38 @@ kbd {
   font-family: Georgia, "Yu Mincho", serif;
   font-size: 1.12rem;
   font-weight: 600;
+  line-height: 1.45;
+}
+
+.experiment-heading > p {
+  margin: 10px 0 0;
+  color: #65777c;
+  font-size: 0.65rem;
+  line-height: 1.65;
+}
+
+.role-key {
+  margin: 11px 0 0;
+}
+
+.role-key div {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px dotted #a9afab;
+}
+
+.role-key dt {
+  color: #789d99;
+  font-size: 0.59rem;
+  font-weight: 700;
+}
+
+.role-key dd {
+  margin: 0;
+  color: #233d49;
+  font-size: 0.61rem;
   line-height: 1.45;
 }
 

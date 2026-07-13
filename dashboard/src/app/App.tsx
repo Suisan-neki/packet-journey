@@ -311,10 +311,10 @@ export default function App() {
 
       <main className="booth-screen">
         <section className={`verdict ${serviceMaintained ? "verdict--success" : "verdict--failure"}`}>
-          <div className="verdict-label">いま起きていること</div>
+          <div className="verdict-label">この実験で確かめていること</div>
           <h1>
-            <span>不要な通信を入口で止め、</span>
-            <strong>必要なサービスを守っています。</strong>
+            <span>テスト負荷を加えても、</span>
+            <strong>HTTPサービスは応答を維持しています。</strong>
           </h1>
           <div className="verdict-state">
             <span>{serviceMaintained ? "SERVICE UP" : "CHECKING"}</span>
@@ -324,10 +324,10 @@ export default function App() {
 
         <ol className="phase-strip" aria-label="デモの進行状況">
           {[
-            ["1", "通常通信を確認"],
-            ["2", "UDP負荷を開始"],
-            ["3", "入口で遮断"],
-            ["4", "HTTP応答を確認"],
+            ["1", "通常時の応答を測る"],
+            ["2", "テスト負荷を加える"],
+            ["3", "指定した負荷を遮断"],
+            ["4", "応答が続くか測る"],
           ].map(([number, label], index) => (
             <li key={number} className={index <= phase ? "is-complete" : ""}>
               <span>{number}</span>
@@ -338,15 +338,20 @@ export default function App() {
 
         <section className="live-experiment" aria-label="通信経路">
           <div className="experiment-heading">
-            <span>LIVE PACKET PATH</span>
-            <h2>同じ入口を通る、2種類の通信</h2>
+            <span>EXPERIMENT DESIGN</span>
+            <h2>負荷を加えても、サービスは動き続けるか</h2>
+            <p>UDPとHTTPの優劣を比べているのではありません。役割の違う2つの通信を同時に使います。</p>
+            <dl className="role-key">
+              <div><dt>実験条件</dt><dd>UDP :{harbor.attackPort}で負荷を加える</dd></div>
+              <div><dt>結果指標</dt><dd>HTTP :8080の応答を測る</dd></div>
+            </dl>
           </div>
 
           <div className="path-board">
             <div className="path-row path-row--udp">
               <div className="path-source">
                 <small>Raspberry Pi A</small>
-                <strong>不要なUDP負荷</strong>
+                <strong>実験で加える負荷</strong>
                 <em>{harbor.attackActive ? `${formatCount(harbor.attackPps)} pps` : "停止中"}</em>
               </div>
               <div className="moving-line moving-line--udp" aria-hidden="true">
@@ -359,7 +364,7 @@ export default function App() {
               </div>
               <div className="blocked-line" aria-hidden="true"><i /><b>×</b></div>
               <div className="path-result path-result--blocked">
-                <small>アプリへ届く前に</small>
+                <small>遮断対象に指定したUDP :{harbor.attackPort}</small>
                 <strong>{modeIsProtect ? "遮断" : "通過"}</strong>
                 <em>{formatCount(harbor.dropped)} packets</em>
               </div>
@@ -368,7 +373,7 @@ export default function App() {
             <div className="path-row path-row--http">
               <div className="path-source">
                 <small>Raspberry Pi A</small>
-                <strong>必要なHTTP通信</strong>
+                <strong>サービスの死活確認</strong>
                 <em>TCP :8080</em>
               </div>
               <div className="moving-line moving-line--http" aria-hidden="true">
@@ -377,11 +382,11 @@ export default function App() {
               <div className="xdp-checkpoint xdp-checkpoint--pass">
                 <small>同じ入口</small>
                 <strong>XDP</strong>
-                <span>必要な通信は通過</span>
+                <span>HTTPは遮断対象外</span>
               </div>
               <div className="passed-line" aria-hidden="true"><i /><b>→</b></div>
               <div className="path-result path-result--service">
-                <small>HTTPサービス</small>
+                <small>守れたかを測る結果指標</small>
                 <strong>{harbor.healthSuccess ? "稼働中" : "応答待ち"}</strong>
                 <em>{harbor.statusCode ?? "—"} / {harbor.latencyMs || "—"} ms</em>
               </div>
@@ -391,23 +396,23 @@ export default function App() {
 
         <section className="proof-bar" aria-label="結論を支える実測値">
           <div className="proof-intro">
-            <span>この3つが証拠です</span>
-            <strong>演出ではなく、実測値</strong>
+            <span>実験の因果関係</span>
+            <strong>条件 → 防御 → 結果</strong>
           </div>
           <div className="proof-item proof-item--load">
-            <span>送った負荷</span>
+            <span>1 / 負荷条件</span>
             <strong>{formatCount(harbor.attackPps)} <small>pps</small></strong>
             <em>traffic-node</em>
           </div>
           <div className="proof-arrow" aria-hidden="true">→</div>
           <div className="proof-item proof-item--drop">
-            <span>入口で遮断</span>
+            <span>2 / 防御処理</span>
             <strong>{dropRatio.toFixed(1)}<small>%</small></strong>
             <em>XDP_DROP / per-CPU map</em>
           </div>
           <div className="proof-arrow" aria-hidden="true">→</div>
           <div className="proof-item proof-item--health">
-            <span>サービスの応答</span>
+            <span>3 / 結果指標</span>
             <strong>{harbor.statusCode ?? "—"} <small>/ {harbor.latencyMs || "—"}ms</small></strong>
             <em>実HTTP GET</em>
           </div>
@@ -432,7 +437,7 @@ export default function App() {
               <article>
                 <span>構成</span>
                 <h3>Raspberry Pi 2台</h3>
-                <p>Pi Aの<code>traffic-node</code>がUDP負荷とHTTP GETを送信。Pi BがXDPで受信時に判定します。</p>
+                <p>Pi AがPi Bへテスト負荷を加えながら、Pi B上のHTTPサービスへGETを送り続けます。UDP自体を危険とみなすのではなく、この展示では<code>UDP :4000</code>を遮断対象として設定しています。</p>
               </article>
               <article>
                 <span>遮断位置</span>
