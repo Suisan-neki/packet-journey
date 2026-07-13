@@ -413,12 +413,13 @@ kbd {
 
 .moving-line i {
   --i: 0;
+
   position: absolute;
   top: calc(50% - 4px);
   left: calc(var(--i) * 12%);
   width: 8px;
   height: 8px;
-  background: #9a6258;
+  background: `#9a6258`;
   animation: packet-move 2.2s linear infinite;
   animation-delay: calc(var(--i) * -0.18s);
 }
