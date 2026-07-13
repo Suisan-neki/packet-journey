@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { isWebDemo, subscribeStream } from "../stream.js";
 
 type HarborMode = "monitor" | "protect";
@@ -136,6 +136,7 @@ export default function App() {
   const [streamStatus, setStreamStatus] = useState(demo ? "demo" : "waiting");
   const [harbor, setHarbor] = useState<HarborState>(demo ? DEMO_STATE : INITIAL_STATE);
   const [latencies, setLatencies] = useState<number[]>(demo ? [18, 15, 16, 14, 15, 13, 14] : []);
+  const [showDetails, setShowDetails] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: 1,
@@ -252,6 +253,15 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowDetails(false);
+      if (event.key.toLowerCase() === "d") setShowDetails(current => !current);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const modeIsProtect = harbor.mode === "protect";
   const dropRatio = harbor.total > 0 ? (harbor.dropped / harbor.total) * 100 : 0;
   const hasLatency = harbor.latencyMs > 0;
@@ -266,11 +276,17 @@ export default function App() {
       : "UDP負荷は停止中。HTTP応答を待っています。";
 
   const serviceMaintained = harbor.healthSuccess;
-  const verdict = serviceMaintained ? "HTTP応答を維持" : "HTTP応答を確認できません";
+  const phase = !harbor.healthSuccess
+    ? 0
+    : !harbor.attackActive
+      ? 1
+      : !modeIsProtect
+        ? 2
+        : 3;
 
   return (
-    <div className="demo-app">
-      <header className="topbar">
+    <div className="booth-app">
+      <header className="booth-header">
         <div className="brand">
           <div className="brand-ship"><ShipMark /></div>
           <div>
@@ -278,144 +294,185 @@ export default function App() {
             <div className="brand-sub">Raspberry Pi × Rust × eBPF/XDP</div>
           </div>
         </div>
-        <div className="run-state">
-          <div className="state-item"><span>表示</span><strong>{demo ? "SAMPLE" : "LIVE"}</strong></div>
-          <div className="state-item"><span>防御モード</span><strong className={modeIsProtect ? "text-drop" : ""}>{harbor.mode.toUpperCase()}</strong></div>
-          <div className="state-item"><span>接続</span><strong>{streamStatus.toUpperCase()}</strong></div>
+
+        <div className="header-status">
+          <span className={demo ? "sample-badge" : "live-badge"}>{demo ? "SAMPLE" : "LIVE"}</span>
+          <div><small>MODE</small><strong>{harbor.mode.toUpperCase()}</strong></div>
+          <div><small>STREAM</small><strong>{streamStatus.toUpperCase()}</strong></div>
+          <button type="button" onClick={() => setShowDetails(true)}>技術詳細 <kbd>D</kbd></button>
         </div>
       </header>
 
-      <div className="truth-note">
+      <div className="sample-notice">
         {demo
-          ? "公開ページは実機出力の表示例です。LIVE版では、以下の数値を2台のRaspberry PiとXDPから受信します。"
-          : "この画面は、2台のRaspberry PiとXDPから受信した実測値だけで更新されています。"}
+          ? "表示中の数値は実機デモの出力例です"
+          : "2台のRaspberry PiとXDPから受信した実測値です"}
       </div>
 
-      <main>
-        <section className={`result-summary ${serviceMaintained ? "result-summary--success" : "result-summary--failure"}`}>
-          <div className="result-heading">
-            <span className="look-here">まず、ここを見る</span>
-            <p>CURRENT RESULT</p>
-            <h1>{verdict}</h1>
-            <div className="result-explanation">{conclusion}</div>
-          </div>
-
-          <div className="evidence-equation" aria-label="結論を支える3つの実測値">
-            <div className="equation-item equation-item--input">
-              <span>1 / 送った負荷</span>
-              <strong>{harbor.attackActive ? formatCount(harbor.attackPps) : "0"} <small>pps</small></strong>
-              <em>UDP :{harbor.attackPort}</em>
-            </div>
-            <div className="equation-arrow" aria-hidden="true">→</div>
-            <div className="equation-item equation-item--decision">
-              <span>2 / XDPの判断</span>
-              <strong>{modeIsProtect ? dropRatio.toFixed(1) : "0.0"}<small>% DROP</small></strong>
-              <em>{modeIsProtect ? "XDP_DROP" : "XDP_PASS"}</em>
-            </div>
-            <div className="equation-arrow" aria-hidden="true">→</div>
-            <div className="equation-item equation-item--outcome">
-              <span>3 / サービス結果</span>
-              <strong>{harbor.statusCode ?? "—"} <small>/ {hasLatency ? harbor.latencyMs : "—"}ms</small></strong>
-              <em>HTTP :8080</em>
-            </div>
+      <main className="booth-screen">
+        <section className={`verdict ${serviceMaintained ? "verdict--success" : "verdict--failure"}`}>
+          <div className="verdict-label">いま起きていること</div>
+          <h1>
+            <span>不要な通信を入口で止め、</span>
+            <strong>必要なサービスを守っています。</strong>
+          </h1>
+          <div className="verdict-state">
+            <span>{serviceMaintained ? "SERVICE UP" : "CHECKING"}</span>
+            <strong>{harbor.statusCode ?? "—"} <small>/ {harbor.latencyMs || "—"} ms</small></strong>
           </div>
         </section>
 
-        <section className="evidence-section">
-          <div className="section-intro">
-            <span>WHY?</span>
-            <h2>なぜこの結論になるのか</h2>
-            <p>上の3つの数値を、同じ番号の順に確認します。細かな値は結論の根拠です。</p>
+        <ol className="phase-strip" aria-label="デモの進行状況">
+          {[
+            ["1", "通常通信を確認"],
+            ["2", "UDP負荷を開始"],
+            ["3", "入口で遮断"],
+            ["4", "HTTP応答を確認"],
+          ].map(([number, label], index) => (
+            <li key={number} className={index <= phase ? "is-complete" : ""}>
+              <span>{number}</span>
+              <strong>{label}</strong>
+            </li>
+          ))}
+        </ol>
+
+        <section className="live-experiment" aria-label="通信経路">
+          <div className="experiment-heading">
+            <span>LIVE PACKET PATH</span>
+            <h2>同じ入口を通る、2種類の通信</h2>
           </div>
 
-          <div className="evidence-rows">
-            <article className="evidence-row evidence-row--input">
-              <header>
-                <span className="row-number">1</span>
-                <div><p>INPUT</p><h3>負荷を実際に送る</h3></div>
-              </header>
-              <div className="row-primary">
-                <span>負荷通信</span>
-                <strong>UDP :{harbor.attackPort}</strong>
+          <div className="path-board">
+            <div className="path-row path-row--udp">
+              <div className="path-source">
+                <small>Raspberry Pi A</small>
+                <strong>不要なUDP負荷</strong>
                 <em>{harbor.attackActive ? `${formatCount(harbor.attackPps)} pps` : "停止中"}</em>
               </div>
-              <dl className="row-facts">
-                <div><dt>送信元</dt><dd>Raspberry Pi A / traffic-node</dd></div>
-                <div><dt>送信済み</dt><dd>{formatCount(harbor.attackPackets)} packets</dd></div>
-                <div><dt>同時に確認</dt><dd>HTTP / TCP :8080</dd></div>
-                <div><dt>送信先</dt><dd>{harbor.target}</dd></div>
-              </dl>
-              <p className="row-proof"><span>実測の出所</span><code>traffic-node / attack_state</code></p>
-            </article>
+              <div className="moving-line moving-line--udp" aria-hidden="true">
+                {Array.from({ length: 9 }).map((_, index) => <i key={index} style={{ "--i": index } as CSSProperties} />)}
+              </div>
+              <div className="xdp-checkpoint">
+                <small>Raspberry Pi B</small>
+                <strong>XDP</strong>
+                <span>{modeIsProtect ? "入口で判定" : "観測中"}</span>
+              </div>
+              <div className="blocked-line" aria-hidden="true"><i /><b>×</b></div>
+              <div className="path-result path-result--blocked">
+                <small>アプリへ届く前に</small>
+                <strong>{modeIsProtect ? "遮断" : "通過"}</strong>
+                <em>{formatCount(harbor.dropped)} packets</em>
+              </div>
+            </div>
 
-            <article className="evidence-row evidence-row--decision">
-              <header>
-                <span className="row-number">2</span>
-                <div><p>DECISION</p><h3>アプリへ届く前に判定する</h3></div>
-              </header>
-              <div className="row-primary">
-                <span>現在の判断</span>
-                <strong>{modeIsProtect ? "XDP_DROP" : "XDP_PASS"}</strong>
-                <em>{modeIsProtect ? `${dropRatio.toFixed(1)}% 遮断` : "観測のみ"}</em>
+            <div className="path-row path-row--http">
+              <div className="path-source">
+                <small>Raspberry Pi A</small>
+                <strong>必要なHTTP通信</strong>
+                <em>TCP :8080</em>
               </div>
-              <div className="kernel-path" aria-label="XDPの処理位置">
-                <span>NIC</span><i /><strong>XDP HOOK</strong><i /><span>network stack</span><i /><span>application</span>
+              <div className="moving-line moving-line--http" aria-hidden="true">
+                {Array.from({ length: 4 }).map((_, index) => <i key={index} style={{ "--i": index } as CSSProperties} />)}
               </div>
-              <dl className="row-facts row-facts--counters">
-                <div><dt>入口の流量</dt><dd>{formatCount(harbor.pps)} pps</dd></div>
-                <div><dt>XDP_PASS</dt><dd>{formatCount(harbor.passed)}</dd></div>
-                <div className="fact-drop"><dt>XDP_DROP</dt><dd>{formatCount(harbor.dropped)}</dd></div>
-                <div><dt>集計方法</dt><dd>per-CPU BPF map</dd></div>
-              </dl>
-              <p className="row-proof"><span>実測の出所</span><code>XDP program / stats</code></p>
-            </article>
-
-            <article className="evidence-row evidence-row--outcome">
-              <header>
-                <span className="row-number">3</span>
-                <div><p>OUTCOME</p><h3>本来のサービスを確認する</h3></div>
-              </header>
-              <div className="row-primary">
-                <span>HTTP GETの結果</span>
-                <strong>{harbor.statusCode ?? "—"} / {hasLatency ? harbor.latencyMs : "—"}ms</strong>
-                <em>{harbor.healthSuccess ? "応答を維持" : "応答なし"}</em>
+              <div className="xdp-checkpoint xdp-checkpoint--pass">
+                <small>同じ入口</small>
+                <strong>XDP</strong>
+                <span>必要な通信は通過</span>
               </div>
-              <div className="outcome-trace">
-                <LatencyTrace values={latencies} />
-                <p>直近30回のHTTP GET応答時間</p>
+              <div className="passed-line" aria-hidden="true"><i /><b>→</b></div>
+              <div className="path-result path-result--service">
+                <small>HTTPサービス</small>
+                <strong>{harbor.healthSuccess ? "稼働中" : "応答待ち"}</strong>
+                <em>{harbor.statusCode ?? "—"} / {harbor.latencyMs || "—"} ms</em>
               </div>
-              <dl className="row-facts">
-                <div><dt>確認元</dt><dd>Raspberry Pi A</dd></div>
-                <div><dt>確認先</dt><dd>Raspberry Pi B / HTTP :8080</dd></div>
-              </dl>
-              <p className="row-proof"><span>実測の出所</span><code>traffic-node / traffic_health</code></p>
-            </article>
+            </div>
           </div>
         </section>
 
-        <section className="supporting-section">
-          <div className="mode-note">
-            <span>MODE</span>
-            <h2>MONITORとPROTECTの違い</h2>
-            <div className="mode-pair">
-              <div className={!modeIsProtect ? "is-current" : ""}><strong>MONITOR</strong><p>統計を取り、パケットは通過させる。</p></div>
-              <div className={modeIsProtect ? "is-current" : ""}><strong>PROTECT</strong><p>指定UDPをXDP_DROPし、アプリへ届けない。</p></div>
-            </div>
+        <section className="proof-bar" aria-label="結論を支える実測値">
+          <div className="proof-intro">
+            <span>この3つが証拠です</span>
+            <strong>演出ではなく、実測値</strong>
           </div>
-
-          <div className="event-log">
-            <div><span>RECENT EVENTS</span><h2>直近の状態変化</h2></div>
-            <ol>
-              {logs.map(entry => (
-                <li key={entry.id} className={`log--${entry.tone}`}>
-                  <time>{entry.time}</time>
-                  <span>{entry.message}</span>
-                </li>
-              ))}
-            </ol>
+          <div className="proof-item proof-item--load">
+            <span>送った負荷</span>
+            <strong>{formatCount(harbor.attackPps)} <small>pps</small></strong>
+            <em>traffic-node</em>
+          </div>
+          <div className="proof-arrow" aria-hidden="true">→</div>
+          <div className="proof-item proof-item--drop">
+            <span>入口で遮断</span>
+            <strong>{dropRatio.toFixed(1)}<small>%</small></strong>
+            <em>XDP_DROP / per-CPU map</em>
+          </div>
+          <div className="proof-arrow" aria-hidden="true">→</div>
+          <div className="proof-item proof-item--health">
+            <span>サービスの応答</span>
+            <strong>{harbor.statusCode ?? "—"} <small>/ {harbor.latencyMs || "—"}ms</small></strong>
+            <em>実HTTP GET</em>
           </div>
         </section>
       </main>
+
+      {showDetails && (
+        <div className="details-backdrop" role="presentation" onMouseDown={() => setShowDetails(false)}>
+          <section
+            className="details-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="details-title"
+            onMouseDown={event => event.stopPropagation()}
+          >
+            <header>
+              <div><span>TECHNICAL DETAILS</span><h2 id="details-title">このデモが実際に測っているもの</h2></div>
+              <button type="button" onClick={() => setShowDetails(false)}>閉じる <kbd>Esc</kbd></button>
+            </header>
+
+            <div className="details-grid">
+              <article>
+                <span>構成</span>
+                <h3>Raspberry Pi 2台</h3>
+                <p>Pi Aの<code>traffic-node</code>がUDP負荷とHTTP GETを送信。Pi BがXDPで受信時に判定します。</p>
+              </article>
+              <article>
+                <span>遮断位置</span>
+                <h3>アプリより手前</h3>
+                <div className="mini-path"><b>NIC</b><i />XDP<i />network stack<i />app</div>
+                <p>指定UDPはソケットやアプリケーションへ届く前に<code>XDP_DROP</code>されます。</p>
+              </article>
+              <article>
+                <span>カウンタ</span>
+                <h3>per-CPU BPF map</h3>
+                <dl>
+                  <div><dt>XDP_PASS</dt><dd>{formatCount(harbor.passed)}</dd></div>
+                  <div><dt>XDP_DROP</dt><dd>{formatCount(harbor.dropped)}</dd></div>
+                  <div><dt>入口の流量</dt><dd>{formatCount(harbor.pps)} pps</dd></div>
+                </dl>
+              </article>
+              <article>
+                <span>サービス確認</span>
+                <h3>実際のHTTP GET</h3>
+                <p>UDP負荷とは別にHTTP :8080へ継続アクセスし、statusとlatencyを測定します。</p>
+                <LatencyTrace values={latencies} />
+              </article>
+              <article>
+                <span>モード</span>
+                <h3>MONITOR / PROTECT</h3>
+                <p><code>MONITOR</code>は観測して通過。<code>PROTECT</code>は指定UDPを入口で破棄します。</p>
+              </article>
+              <article>
+                <span>直近のイベント</span>
+                <h3>Event stream</h3>
+                <ol className="details-log">
+                  {logs.slice(0, 3).map(entry => (
+                    <li key={entry.id}><time>{entry.time}</time><span>{entry.message}</span></li>
+                  ))}
+                </ol>
+              </article>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
